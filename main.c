@@ -1,216 +1,249 @@
 #include <stdio.h>
+#include <string.h>
+#include <ctype.h>
 #include "pico/stdlib.h"
 #include "pico/time.h"
-#include "hardware/irq.h"
 #include "hardware/gpio.h"
-#include "hardware/pwm.h"
+#include "uart.h"
+#include "lorawan.h"
 
-/////////////////////////////////////////////////////
-//                      MACROS                     //
-/////////////////////////////////////////////////////
-
-/*    LEDs    */
-#define D1 22
-#define D2 21
-#define D3 20
-
-/*   BUTTONS   */
 #define SW_0 9
-#define SW_1 8
-#define SW_2 7
 #define BUTTON_PERIOD 10
 #define BUTTON_FILTER 5
-#define SW0_RELEASED 1
-#define SW1_RELEASED 1
-#define SW2_RELEASED 1
+#define RELEASED 1
 
-/*     PWM      */
-#define PWM_FREQ 1000
-#define LEVEL 5
-#define DIVIDER 125
-#define BRIGHTNESS 200
-#define MIN_BRIGHTNESS 0
-
-/*  STEP MOTOR  */
-#define IN1 13
-#define IN2 6
-#define IN3 3
-#define IN4 2
-#define OPTOFORK 28
-#define PIEZO 27
-
-/*     LoRaWAN     */
+#if 0
+#define UART_NR 0
+#define UART_TX_PIN 0
+#define UART_RX_PIN 1
+#else
 #define UART_NR 1
 #define UART_TX_PIN 4
 #define UART_RX_PIN 5
+#endif
+
 #define BAUD_RATE 9600
+#define MAX_COUNT 5
 
-/*   I2C   */
-#define I2C0_SDA_PIN 16
-#define I2C0_SCL_PIN 17
-#define DEVADDR 0x50
-#define BAUDRATE 100000
-#define I2C_MEMORY_SIZE 32768
-#define MAX_LOG_SIZE 64
-#define MAX_LOG_ENTRY 32
-#define DEBUG_LOG_SIZE 6
+#define MAX_COMMANDS 6 // 6 commands that needs to set up communication and network communication with lorawan, not including message
+#define STRLEN 80
 
-/////////////////////////////////////////////////////
-//             FUNCTION DECLARATIONS               //
-/////////////////////////////////////////////////////
-void ledInit();
+typedef struct lorawan_item_ {
+    char command[STRLEN];
+    char retval[STRLEN];
+    uint sleep_time;
+} lorawan_item;
+
 void buttonInit();
-void pwmInit();
-void ledOn(uint led_pin);
-void ledOff(uint led_pin);
-void stepperMotorInit();
-void optoforkInit();
-void piezoInit();
 bool repeatingTimerCallback(struct repeating_timer *t);
 
-/////////////////////////////////////////////////////
-//                GLOBAL VARIABLES                 //
-/////////////////////////////////////////////////////
-volatile bool sw1_buttonEvent = false;
-volatile bool d2State = false;
+static volatile bool buttonEvent = false;
+static volatile uint lorawanState = 0;
 
-/////////////////////////////////////////////////////
-//                     MAIN                        //
-/////////////////////////////////////////////////////
-int main() {
+int main(void) {
 
     stdio_init_all();
 
-    ledInit();
-    pwmInit();
     buttonInit();
-    stepperMotorInit();
-    optoforkInit();
-    piezoInit();
+
+    uart_setup(UART_NR, UART_TX_PIN, UART_RX_PIN, BAUD_RATE);
+
+    lorawan_item lorawan[MAX_COMMANDS] = {{"AT\r\n", "+AT: OK\r\n", 500},
+                                          {"AT+MODE=LWOTAA\r\n", "+MODE: LWOTAA\r\n", 500},
+                                          {"AT+KEY=APPKEY,\"511F30D4D81E7B806536733DE7155FDE\"\r\n", "+KEY: APPKEY 511F30D4D81E7B806536733DE7155FDE\r\n", 500},  // Gemma
+                                           //{"AT+KEY=APPKEY,\"83A228D811E594812D8735EDDCCE28D0\"\r\n", "+KEY: APPKEY 83A228D811E594812D8735EDDCCE28D0\r\n", 500},  // Mong
+                                           //{"AT+KEY=APPKEY,\"3D036E4388F937105A649BA6B0AD6366\"\r\n", "+KEY: APPKEY 3D036E4388F937105A649BA6B0AD6366\r\n", 500},  // Xuan
+                                          {"AT+CLASS=A\r\n", "+CLASS: A\r\n", 500},
+                                          {"AT+PORT=8\r\n", "+PORT: 8\r\n", 500},
+                                          {"AT+JOIN\r\n", "+JOIN: Starting\r\n", 5000}};  // +JOIN: Starting       sleep_time: testing needed
+                                                                                                                       // +JOIN: NORMAL
+                                                                                                                       // +JOIN: NetID 000000 DevAddr
+                                                                                                                       // +JOIN: Done
+    lorawan_item lorawan_message;  // Separatedly for message, has to be moved to case 6
+
+    char retval_str[STRLEN];
 
     struct repeating_timer timer;
     add_repeating_timer_ms(BUTTON_PERIOD, repeatingTimerCallback, NULL, &timer);
 
-    const uint turning_sequence[8][4] = {{1, 0, 0, 0},
-                                         {1, 1, 0, 0},
-                                         {0, 1, 0, 0},
-                                         {0, 1, 1, 0},
-                                         {0, 0, 1, 0},
-                                         {0, 0, 1, 1},
-                                         {0, 0, 0, 1},
-                                         {1, 0, 0, 1}};
-
     while (true) {
 
-        /* SW1 - D2 */
-        if (sw1_buttonEvent) {
-            sw1_buttonEvent = false;
-            if(true == d2State) {
-                d2State = false;
+        uint count = 0;
+        bool retval_bool = false;
+        bool lora_comm = false;
+
+        if (buttonEvent) {
+            buttonEvent = false;
+            if (true == lora_comm) {
+                retval_bool = false;
+                lorawanState = 0;
+                lora_comm = false;
             } else {
-                d2State = true;
+                lora_comm = true;
             }
         }
 
-        if (true == d2State) {
-            ledOn(D2);
-            for (int i = 7; i >= 0; i--) {
-                gpio_put(IN1, turning_sequence[i][0]);
-                gpio_put(IN2, turning_sequence[i][1]);
-                gpio_put(IN3, turning_sequence[i][2]);
-                gpio_put(IN4, turning_sequence[i][3]);
-                sleep_ms(10);
+        if (true == lora_comm) {
+            switch (lorawanState) {
+                case 0:                         /*    Connecting to Lora module    */
+                    while (MAX_COUNT > count++) {
+                        retval_bool = loraCommunication(lorawan[lorawanState].command, lorawan[lorawanState].sleep_time, retval_str);
+                        if (true == retval_bool) {
+                            if (strcmp(lorawan[lorawanState].retval, retval_str) == 0) {
+                                printf("Comparison->match for: %s\n", retval_str);
+                                lorawanState = 1;
+                                retval_bool = false;
+                                break;
+                            } else {
+                                printf("Comparison->no match, retval_str: %s lorawan[%d].retval: %s\n", retval_str, lorawanState, lorawan[lorawanState].retval);
+                                printf("Exiting lora communication.\n");
+                                lora_comm = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (MAX_COUNT == count) {
+                        printf("Lorawan module not responding.\n");
+                        lora_comm = false;
+                    }
+                case 1:                         /*            MODE             */
+                    retval_bool = loraCommunication(lorawan[lorawanState].command, lorawan[lorawanState].sleep_time,
+                                                    retval_str);
+                    if (true == retval_bool) {
+                        if (strcmp(lorawan[lorawanState].retval, retval_str) == 0) {
+                            printf("Comparison->same for: %s\n", retval_str);
+                            lorawanState = 2;
+                            retval_bool = false;
+                            break;
+                        } else {
+                            printf("Comparison->no match, retval_str: %s lorawan[%d].retval: %s\n", retval_str, lorawanState, lorawan[lorawanState].retval);
+                            printf("Exiting lora communication.\n");
+                            lorawanState = 0;
+                            lora_comm = false;
+                            break;
+                        }
+                    } else {
+                        printf("MODE phase failed, exiting lora communication.\n");
+                        lorawanState = 0;
+                        lora_comm = false;
+                        break;
+                    }
+                case 2:                         /*           APIKEY            */
+                    retval_bool = loraCommunication(lorawan[lorawanState].command, lorawan[lorawanState].sleep_time,
+                                                    retval_str);
+                    if (true == retval_bool) {
+                        if (strcmp(lorawan[lorawanState].retval, retval_str) == 0) {
+                            printf("Comparison->same for: %s\n", retval_str);
+                            lorawanState = 3;
+                            retval_bool = false;
+                            break;
+                        } else {
+                            printf("Comparison->no match, retval_str: %s lorawan[%d].retval: %s\n", retval_str, lorawanState, lorawan[lorawanState].retval);
+                            printf("Exiting lora communication.\n");
+                            lorawanState = 0;
+                            lora_comm = false;
+                            break;
+                        }
+                    } else {
+                        printf("APIKEY failed, exiting lora communication.\n");
+                        lorawanState = 0;
+                        lora_comm = false;
+                        break;
+                    }
+                case 3:                         /*           CLASS             */
+                    retval_bool = loraCommunication(lorawan[lorawanState].command, lorawan[lorawanState].sleep_time,
+                                                    retval_str);
+                    if (true == retval_bool) {
+                        if (strcmp(lorawan[lorawanState].retval, retval_str) == 0) {
+                            printf("Comparison->same for: %s\n", retval_str);
+                            lorawanState = 4;
+                            retval_bool = false;
+                            break;
+                        } else {
+                            printf("Comparison->no match, retval_str: %s lorawan[%d].retval: %s\n", retval_str, lorawanState, lorawan[lorawanState].retval);
+                            printf("Exiting lora communication.\n");
+                            lorawanState = 0;
+                            lora_comm = false;
+                            break;
+                        }
+                    } else {
+                        printf("CLASS phase failed, exiting lora communication.\n");
+                        lorawanState = 0;
+                        lora_comm = false;
+                        break;
+                    }
+                case 4:                         /*            PORT             */
+                    retval_bool = loraCommunication(lorawan[lorawanState].command, lorawan[lorawanState].sleep_time,
+                                                    retval_str);
+                    if (true == retval_bool) {
+                        if (strcmp(lorawan[lorawanState].retval, retval_str) == 0) {
+                            printf("Comparison->same for: %s\n", retval_str);
+                            lorawanState = 5;
+                            retval_bool = false;
+                            break;
+                        } else {
+                            printf("Comparison->no match, retval_str: %s lorawan[%d].retval: %s\n", retval_str, lorawanState, lorawan[lorawanState].retval);
+                            printf("Exiting lora communication.\n");
+                            lorawanState = 0;
+                            lora_comm = false;
+                            break;
+                        }
+                    } else {
+                        printf("PORT phase failed, exiting lora communication.\n");
+                        lorawanState = 0;
+                        lora_comm = false;
+                        break;
+                    }
+               case 5:                         /*            JOIN             */
+                   retval_bool = loraCommunication(lorawan[lorawanState].command, lorawan[lorawanState].sleep_time,
+                                                   retval_str);
+                    if (true == retval_bool) {
+                        if (strcmp(lorawan[lorawanState].retval, retval_str) == 0) {
+                            printf("Comparison->same for: %s\n", retval_str);
+                            lora_comm = false;
+                            //lorawanState = 6;
+                            // retval_bool = false;
+                            break;
+                        } else {
+                            printf("Comparison->no match, retval_str: %s lorawan[%d].retval: %s\n", retval_str, lorawanState, lorawan[lorawanState].retval);
+                            printf("Exiting lora communication.\n");
+                            lorawanState = 0;
+                            lora_comm = false;
+                            break;
+                        }
+                    } else {
+                        printf("JOIN phase failed, exiting communication with LoRa.\n");
+                        lorawanState = 0;
+                        lora_comm = false;
+                        break;
+                    }
             }
-        } else {
-            ledOff(D2);
         }
-
     }
-
-    return 0;
-}
-
-/////////////////////////////////////////////////////
-//                   FUNCTIONS                     //
-/////////////////////////////////////////////////////
-
-void ledInit() {
-    gpio_init(D2);
-    gpio_set_dir(D2, GPIO_OUT);
 }
 
 void buttonInit() {
-    gpio_init(SW_1);
-    gpio_set_dir(SW_1, GPIO_IN);
-    gpio_pull_up(SW_1);
-}
-
-void pwmInit() {
-    pwm_config config = pwm_get_default_config();
-
-    // D2:             (2B)
-    uint d2_slice = pwm_gpio_to_slice_num(D2);
-    uint d2_chanel = pwm_gpio_to_channel(D2);
-    pwm_set_enabled(d2_slice, false);
-    pwm_config_set_clkdiv_int(&config, DIVIDER);
-    pwm_config_set_wrap(&config, PWM_FREQ - 1);
-    pwm_init(d2_slice, &config, false);
-    pwm_set_chan_level(d2_slice, d2_chanel, LEVEL + 1);
-    gpio_set_function(D2, GPIO_FUNC_PWM);
-    pwm_set_enabled(d2_slice, true);
-
-    pwm_set_gpio_level(D2, MIN_BRIGHTNESS);
-}
-
-void ledOn(uint led_pin) {
-    pwm_set_gpio_level(led_pin, BRIGHTNESS);
-}
-
-void ledOff(uint led_pin) {
-    pwm_set_gpio_level(led_pin, MIN_BRIGHTNESS);
-}
-
-void stepperMotorInit() {
-    gpio_init(IN1);
-    gpio_set_dir(IN1, GPIO_OUT);
-    gpio_init(IN2);
-    gpio_set_dir(IN2, GPIO_OUT);
-    gpio_init(IN3);
-    gpio_set_dir(IN3, GPIO_OUT);
-    gpio_init(IN4);
-    gpio_set_dir(IN4, GPIO_OUT);
-}
-
-void optoforkInit() {
-    gpio_init(OPTOFORK);
-    gpio_set_dir(OPTOFORK, GPIO_IN);
-    gpio_pull_up(OPTOFORK);
-}
-
-void piezoInit() {
-    gpio_init(PIEZO);
-    gpio_set_dir(PIEZO, GPIO_IN);
-    gpio_pull_up(PIEZO);
+    gpio_init(SW_0);
+    gpio_set_dir(SW_0, GPIO_IN);
+    gpio_pull_up(SW_0);
 }
 
 bool repeatingTimerCallback(struct repeating_timer *t) {
+    // For SW_1: ON-OFF
+    static uint button_state = 0, filter_counter = 0;
+    uint new_state = 1;
 
-    /* SW1 */
-    static uint sw1_button_state = 0, sw1_filter_counter = 0;
-    uint sw1_new_state = 1;
-
-    sw1_new_state = gpio_get(SW_1);
-    if (sw1_button_state != sw1_new_state) {
-        if (++sw1_filter_counter >= BUTTON_FILTER) {
-            sw1_button_state = sw1_new_state;
-            sw1_filter_counter = 0;
-            if (sw1_new_state != SW1_RELEASED) {
-                sw1_buttonEvent = true;
+    new_state = gpio_get(SW_0);
+    if (button_state != new_state) {
+        if (++filter_counter >= BUTTON_FILTER) {
+            button_state = new_state;
+            filter_counter = 0;
+            if (new_state != RELEASED) {
+                buttonEvent = true;
             }
         }
     } else {
-        sw1_filter_counter = 0;
+        filter_counter = 0;
     }
-
     return true;
 }
