@@ -52,9 +52,7 @@ int main(void) {
         if (true == lora_send && true == lora_connected) {
             if (loraMsg(dummy_msg1, strlen(dummy_msg1), retval_str)) {
                 printf("%s\n", retval_str);
-            } else {
-                printf("Message not sent successfully.\n");
-            }
+            } 
             lora_send = false;
         }
     }
