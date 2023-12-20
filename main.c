@@ -27,19 +27,22 @@ bool repeatingTimerCallback(struct repeating_timer *t);
 /////////////////////////////////////////////////////
 //                GLOBAL VARIABLES                 //
 /////////////////////////////////////////////////////
-volatile bool sw0_buttonEvent = false;
-volatile bool sw1_buttonEvent = false;
-volatile bool sw2_buttonEvent = false;
-
-// States:
-static volatile bool initWaitingState = true;
-static volatile bool dispenseWaitingState = false;
+static volatile bool sw0_buttonEvent = false;
+static volatile bool sw1_buttonEvent = false;
+static volatile bool sw2_buttonEvent = false;
 
 extern bool calibrated;
-extern int current_position;
-extern int alignment_unit;
 extern int calibration_count;
 
+/////////////////////////////////////////////////////
+//                 ENUM for STATES                 //
+/////////////////////////////////////////////////////
+enum SystemState {
+    CALIB_WAITING,
+    DISPENSE_WAITING
+};
+
+enum SystemState currentState = CALIB_WAITING;
 
 /////////////////////////////////////////////////////
 //                     MAIN                        //
@@ -52,6 +55,7 @@ int main(void) {
     pwmInit();
     stepperMotorInit();
     optoforkInit();
+    piezoInit();
 
     struct repeating_timer timer;
     add_repeating_timer_ms(BUTTON_PERIOD, repeatingTimerCallback, NULL, &timer);
@@ -60,24 +64,35 @@ int main(void) {
     while(true) {
         if (true == sw0_buttonEvent) {
             sw0_buttonEvent = false;
-            if (true == initWaitingState) {
-                // calibrate and align
-                calibrateMotor();
-                current_position = 0;
-                // others
-                allLedsOn();
-                initWaitingState = false;
-                dispenseWaitingState = true;
-            } else if (true == dispenseWaitingState) {
-                // start dispensing things
-                for (int i = 0; i < COMPARTMENTS; i++) {
-                    runMotorClockwise(calibration_count / COMPARTMENTS);
-                    sleep_ms(30000);
-                }
+            switch (currentState) {
+                case CALIB_WAITING:
+                    calibrateMotor(); // calibrate and align
+                    allLedsOn();
+                    currentState = DISPENSE_WAITING;
+                    break;
+                case DISPENSE_WAITING:
+                    break;
             }
         }
 
-        if (true == initWaitingState) {
+        if (true == sw1_buttonEvent) {
+            sw1_buttonEvent = false;
+            switch (currentState) {
+                case CALIB_WAITING:
+                    break;
+                case DISPENSE_WAITING:
+                    allLedsOff();
+                    // start dispensing pills
+                    for (int i = 0; i < (COMPARTMENTS - 1); i++) {
+                        runMotorClockwise(calibration_count / COMPARTMENTS + COMPARTMENTS - 1);
+                        sleep_ms(SLEEPTIME_BETWEEN / 2);
+                    }
+                    currentState = CALIB_WAITING;
+                    break;
+            }
+        }
+
+        if (CALIB_WAITING == currentState) {
             allLedsOn();
             sleep_ms(500);
             allLedsOff();
@@ -103,6 +118,20 @@ bool repeatingTimerCallback(struct repeating_timer *t) {
     } else {
         sw0_filter_counter = 0;
     }
-
+    /* SW1 */
+    static uint sw1_button_state = 0, sw1_filter_counter = 0;
+    uint sw1_new_state = 1;
+    sw1_new_state = gpio_get(SW_1);
+    if (sw1_button_state != sw1_new_state) {
+        if (++sw1_filter_counter >= BUTTON_FILTER) {
+            sw1_button_state = sw1_new_state;
+            sw1_filter_counter = 0;
+            if (sw1_new_state != SW1_RELEASED) {
+                sw1_buttonEvent = true;
+            }
+        }
+    } else {
+        sw1_filter_counter = 0;
+    }
     return true;
 }
