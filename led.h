@@ -1,5 +1,6 @@
 #ifndef LEDS
 #define LEDS
+#define BLINK_SLEEP_TIME 300
 
 /*   LEDS   */
 #define D1 22
@@ -17,5 +18,6 @@ void ledsInit();
 void pwmInit();
 void allLedsOn();
 void allLedsOff();
+void blink();
 
 #endif
