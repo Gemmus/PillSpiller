@@ -21,12 +21,11 @@ static lorawan_item lorawan[] = {{"AT\r\n", "+AT: OK\r\n", STD_WAITING_TIME},
                                  //{"AT+KEY=APPKEY,\"3D036E4388F937105A649BA6B0AD6366\"\r\n", "+KEY: APPKEY 3D036E4388F937105A649BA6B0AD6366\r\n", STD_WAITING_TIME},  // Xuan
                                  {"AT+CLASS=A\r\n", "+CLASS: A\r\n", STD_WAITING_TIME},
                                  {"AT+PORT=8\r\n", "+PORT: 8\r\n", STD_WAITING_TIME},
-                                 {"AT+JOIN\r\n", "", MSG_WAITING_TIME}};
+                                 {"AT+JOIN\r\n", "Network joined\r\n", MSG_WAITING_TIME}};
 
 bool loraInit() {
     uint count = 0;
     char return_message[STRLEN];
-    const char joined[] = "Network joined";
 
     uart_setup(UART_NR, UART_TX_PIN, UART_RX_PIN, BAUD_RATE);
 
@@ -42,14 +41,15 @@ bool loraInit() {
                 return false;
             }
         }
-        for (lorawanState; lorawanState < (sizeof(lorawan)/sizeof(lorawan[0]) - 1); lorawanState++) {
+        for (lorawanState; lorawanState < (sizeof(lorawan)/sizeof(lorawan[0]) - 1); lorawanState++) 0--*
+        {
             if (false == retvalChecker(lorawanState)) {
                 lorawanState = 0;
                 return false;
             }
         }
         if (true == loraCommunication(lorawan[lorawanState].command, lorawan[lorawanState].sleep_time, return_message)) {
-            if (strstr(return_message, joined) != NULL) {
+            if (strstr(return_message, lorawan[lorawanState].retval) != NULL) {
                 DBG_PRINT("Comparison->same for: %s\n", return_message);
                 lorawanState = 0;
                 return true;
