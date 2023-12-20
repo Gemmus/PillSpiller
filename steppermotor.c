@@ -11,15 +11,13 @@ static const uint turning_sequence[8][4] = {{1, 0, 0, 0},
                                             {0, 0, 0, 1},
                                             {1, 0, 0, 1}};
 
-const int alignment_unit = 422;
-
 volatile bool calibrated = false;
 volatile bool fallingEdge = false;
 static volatile int revolution_counter = 0;
 volatile int calibration_count = 0;
 static volatile int row = 0;
 static const int stepper_array[] = {IN1, IN2, IN3, IN4};
-volatile int current_position;
+volatile bool pill_detected = false;
 
 void stepperMotorInit() {
     for (int i = 0; i < sizeof(stepper_array) / sizeof(stepper_array[0]); i++) {
@@ -83,4 +81,10 @@ void optoFallingEdge() {
         calibration_count = revolution_counter;
     }
     revolution_counter = 0;
+}
+
+void piezoInit() {
+    gpio_init(PIEZO);
+    gpio_set_dir(PIEZO, GPIO_IN);
+    gpio_pull_up(PIEZO);
 }
