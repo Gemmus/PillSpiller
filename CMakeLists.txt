@@ -29,7 +29,13 @@ add_executable(${PROJECT_NAME}
     lorawan.c
     lorawan.h
     eeprom.c
-    eeprom.h led.c piezo.h piezo.c steppermotor.c steppermotor.h button.h button.c)
+    eeprom.h
+    led.c
+    led.h
+    button.h
+    button.c
+    steppermotor.c
+    steppermotor.h steppermotor.c)
 
 # Create map/bin/hex/uf2 files
 pico_add_extra_outputs(${PROJECT_NAME})
