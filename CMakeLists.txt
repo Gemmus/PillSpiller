@@ -8,6 +8,7 @@ include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 project(blink C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
+set(PICO_BOARD pico_w)
 
 # Creates a pico-sdk subdirectory in our project for the libraries
 pico_sdk_init()
@@ -26,7 +27,9 @@ add_executable(${PROJECT_NAME}
     ring_buffer.c
     ring_buffer.h
     lorawan.c
-    lorawan.h)
+    lorawan.h
+    eeprom.c
+    eeprom.h led.c piezo.h piezo.c steppermotor.c steppermotor.h button.h button.c)
 
 # Create map/bin/hex/uf2 files
 pico_add_extra_outputs(${PROJECT_NAME})
