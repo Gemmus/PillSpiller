@@ -1,8 +1,8 @@
 #include "pico/stdlib.h"
 #include "steppermotor.h"
-#include "led.h"
 #include <stdio.h>
 
+static const int stepper_array[] = {IN1, IN2, IN3, IN4};
 static const uint turning_sequence[8][4] = {{1, 0, 0, 0},
                                             {1, 1, 0, 0},
                                             {0, 1, 0, 0},
@@ -12,12 +12,11 @@ static const uint turning_sequence[8][4] = {{1, 0, 0, 0},
                                             {0, 0, 0, 1},
                                             {1, 0, 0, 1}};
 
-volatile bool calibrated = false;
-volatile bool fallingEdge = false;
+static volatile int row = 0;
 static volatile int revolution_counter = 0;
 volatile int calibration_count = 0;
-static volatile int row = 0;
-static const int stepper_array[] = {IN1, IN2, IN3, IN4};
+volatile bool calibrated = false;
+volatile bool fallingEdge = false;
 volatile bool pill_detected = false;
 
 void stepperMotorInit() {
