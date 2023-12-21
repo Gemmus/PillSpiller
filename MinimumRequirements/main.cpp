@@ -13,6 +13,12 @@
 #include "eeprom.h"
 #include "steppermotor.h" // includes stepper motor, optofork and piezo related codes
 
+#ifndef DEBUG_PRINT
+#define DBG_PRINT(f_, ...)  printf((f_), ##__VA_ARGS__)
+#else
+#define DBG_PRINT(f_, ...)
+#endif
+
 /////////////////////////////////////////////////////
 //                      MACROS                     //
 /////////////////////////////////////////////////////
@@ -29,19 +35,17 @@ bool repeatingTimerCallback(struct repeating_timer *t);
 static volatile bool sw0_buttonEvent = false;
 static volatile bool sw1_buttonEvent = false;
 
-extern bool calibrated;
 extern int calibration_count;
+extern bool calibrated;
 extern bool pill_detected;
 
 /////////////////////////////////////////////////////
 //                 ENUM for STATES                 //
 /////////////////////////////////////////////////////
 enum SystemState {
-    CALIB_WAITING,
-    DISPENSE_WAITING
+    CALIB_WAITING,       // EEPROM, CALIBRATED: 0 == CALIB_WAITING
+    DISPENSE_WAITING     //                     1 == DISPENSE_WAITING
 };
-
-enum SystemState currentState = CALIB_WAITING;
 
 /////////////////////////////////////////////////////
 //                     MAIN                        //
@@ -55,6 +59,9 @@ int main(void) {
     stepperMotorInit();
     optoforkInit();
     piezoInit();
+    i2cInit();
+
+    enum SystemState currentState = CALIB_WAITING;
 
     struct repeating_timer timer;
     add_repeating_timer_ms(BUTTON_PERIOD, repeatingTimerCallback, NULL, &timer);
@@ -91,7 +98,7 @@ int main(void) {
                                 blink();
                             }
                         }
-                        sleep_ms(SLEEPTIME_BETWEEN / 2);
+                        sleep_ms((SLEEP_BETWEEN - (BLINK_TIMES * BLINK_SLEEP_TIME * 2)) / 2);
                     }
                     currentState = CALIB_WAITING;
                     break;
