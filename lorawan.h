@@ -12,7 +12,6 @@
 #endif
 
 #define BAUD_RATE 9600
-#define MAX_COUNT 5
 
 #define STD_WAITING_TIME 500
 #define MSG_WAITING_TIME 10000
