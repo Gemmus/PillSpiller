@@ -46,6 +46,7 @@ extern int calibration_count;
 extern int revolution_counter;
 extern bool calibrated;
 extern bool pill_detected;
+extern bool fallingEdge;
 
 /////////////////////////////////////////////////////
 //                 ENUM for STATES                 //
@@ -78,18 +79,8 @@ int main(void) {
     piezoInit();
     i2cInit();
 
-/*  // check if it was powered off in the middle of motor turning
-    bool stored_state = i2cReadByte(deviceStateAddr);
-    DBG_PRINT("%d", stored_state);
-    if (1 == stored_state) {
-        currentState = DISPENSE_WAITING;
-        DBG_PRINT("%s", currentState);
-        // read calibration_count and set it
-        // read how many was moved
-        // read compartmentFinishedAddr if yes, turns back and calib and cont
-        //                              if no, just remember state and calib
-    }
-*/
+    //eraseAll();
+
     struct repeating_timer timer;
     add_repeating_timer_ms(BUTTON_PERIOD, repeatingTimerCallback, NULL, &timer);
     gpio_set_irq_enabled_with_callback(OPTOFORK, GPIO_IRQ_EDGE_FALL, true, gpioFallingEdge);
@@ -97,7 +88,80 @@ int main(void) {
 
     int compartmentsMoved = 1;
 
-    //eraseAll();
+    // check if it was powered off in the middle of motor turning
+    bool stored_state = i2cReadByte(deviceStateAddr);
+    DBG_PRINT("%d", stored_state);
+    if (1 == stored_state) {
+        calibrated = true;
+        allLedsOff();
+        currentState = DISPENSE_WAITING;
+
+        calibration_count = readInt(calibCountAddr);
+        DBG_PRINT("Calibration count stored %d\n", calibration_count);
+        if (0 < calibration_count) {
+            compartmentsMoved = readInt(compartmentsMovedAddr);
+            DBG_PRINT("Compartments moved: %d\n", compartmentsMoved);
+            if (0 < compartmentsMoved) {
+                compartmentFinished = i2cReadByte(compartmentFinishedAddr);
+                DBG_PRINT("CompartmentFinished %s", compartmentFinished);
+                switch (compartmentFinished) {
+                    case IN_THE_MIDDLE:
+                        while (false == fallingEdge) {
+                            runMotorAntiClockwise(1);
+                        }
+                        fallingEdge = false;
+                        for (int i = 0; i < ALIGNMENT; i++) {
+                            runMotorClockwise(1);
+                        }
+                        for (int i = 0; i < compartmentsMoved; i++) {
+                            for (int j = 0; j < (calibration_count / COMPARTMENTS + COMPARTMENTS - 1); j++) {
+                                runMotorClockwise(1);
+                                if (j == 0) {
+                                    compartmentFinished = IN_THE_MIDDLE;
+                                    i2cWriteByte(compartmentFinishedAddr, compartmentFinished);
+                                }
+                            }
+                            compartmentFinished = FINISHED;
+                            i2cWriteByte(compartmentFinishedAddr, compartmentFinished);
+                        }
+                        sleep_ms(SLEEP_BETWEEN);
+                    case FINISHED:
+                        for (; compartmentsMoved <= (COMPARTMENTS - 1); compartmentsMoved++) {
+                            for (int i = 0; i < (calibration_count / COMPARTMENTS + COMPARTMENTS - 1); i++) {
+                                runMotorClockwise(1);
+                                if (i == 0) {
+                                    compartmentFinished = IN_THE_MIDDLE;
+                                    i2cWriteByte(compartmentFinishedAddr, compartmentFinished);
+                                }
+                            }
+                            if (true == pill_detected) {
+                                pill_detected = false;
+                                for (int i = 0; i < BLINK_TIMES; i++) {
+                                    blink();
+                                }
+                            }
+                            compartmentFinished = FINISHED;
+                            i2cWriteByte(compartmentFinishedAddr, compartmentFinished);
+                            writeInt(compartmentsMovedAddr, compartmentsMoved);
+                            if ((COMPARTMENTS - 1) != compartmentsMoved ) {
+                                sleep_ms(SLEEP_BETWEEN / 4);
+                            } else {
+                                DBG_PRINT("All pills dispensed. Waiting for button press to calibrate.\n");
+                            }
+                        }
+                        currentState = CALIB_WAITING;
+                        i2cWriteByte(deviceStateAddr, currentState);
+                        compartmentFinished = IN_THE_MIDDLE;
+                        i2cWriteByte(compartmentFinishedAddr, compartmentFinished);
+                        calibration_count = 0;
+                        writeInt(calibCountAddr, calibration_count);
+                        compartmentsMoved = 0;
+                        writeInt(compartmentsMovedAddr, compartmentsMoved);
+                        break;
+                }
+            }
+        }
+    }
 
     while(true) {
         if (true == sw0_buttonEvent) {
@@ -106,12 +170,9 @@ int main(void) {
                 case CALIB_WAITING:
                     calibrateMotor(); /* calibrates and aligns */
                     allLedsOn();
-                    i2cWriteByte(deviceStateAddr, currentState);
-                    //DBG_PRINT("deviceStateAddr: %d\n", i2cReadByte(deviceStateAddr));
-                    writeInt(calibCountAddr, calibration_count);
-                    uint32_t retval = readInt(calibCountAddr);
-                    //DBG_PRINT("read calibCountAddr: %d\n", retval);
                     currentState = DISPENSE_WAITING;
+                    i2cWriteByte(deviceStateAddr, currentState);
+                    writeInt(calibCountAddr, calibration_count);
                     break;
                 case DISPENSE_WAITING:
                     break;
@@ -133,7 +194,6 @@ int main(void) {
                             if (i == 0) {
                                 compartmentFinished = IN_THE_MIDDLE;
                                 i2cWriteByte(compartmentFinishedAddr, compartmentFinished);
-                                //DBG_PRINT("Send false->compartmentFinishedAddr %d\n", i2cReadByte(compartmentFinishedAddr));
                             }
                         }
                         if (true == pill_detected) {
@@ -144,29 +204,21 @@ int main(void) {
                         }
                         compartmentFinished = FINISHED;
                         i2cWriteByte(compartmentFinishedAddr, compartmentFinished);
-                        //DBG_PRINT("Send true->compartmentFinishedAddr %d\n", i2cReadByte(compartmentFinishedAddr));
                         writeInt(compartmentsMovedAddr, compartmentsMoved);
-                        //uint32_t retval = readInt(compartmentsMovedAddr);
-                        //DBG_PRINT("read compartmentsMoved: %d\n", retval);
                         if ((COMPARTMENTS - 1) != compartmentsMoved ) {
-                            sleep_ms((SLEEP_BETWEEN - (BLINK_TIMES * BLINK_SLEEP_TIME * 2)) / 4);
+                            sleep_ms(SLEEP_BETWEEN / 4);
                         } else {
                             DBG_PRINT("All pills dispensed. Waiting for button press to calibrate.\n");
                         }
                     }
                     currentState = CALIB_WAITING;
                     i2cWriteByte(deviceStateAddr, currentState);
-                    //DBG_PRINT("RESET deviceStateAddr %d\n", i2cReadByte(deviceStateAddr));
                     compartmentFinished = IN_THE_MIDDLE;
                     i2cWriteByte(compartmentFinishedAddr, compartmentFinished);
-                    //DBG_PRINT("RESET Send false->compartmentFinishedAddr %d\n", i2cReadByte(compartmentFinishedAddr));
                     calibration_count = 0;
                     writeInt(calibCountAddr, calibration_count);
-                    //DBG_PRINT("RESET read calibCountAddr: %d\n", readInt(calibCountAddr));
                     compartmentsMoved = 0;
                     writeInt(compartmentsMovedAddr, compartmentsMoved);
-                    uint32_t reset_rtv = readInt(compartmentsMovedAddr);
-                    //DBG_PRINT("read compartmentsMoved: %d\n", reset_rtv);
                     break;
             }
         }
