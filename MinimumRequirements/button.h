@@ -8,7 +8,6 @@
 #define BUTTON_FILTER 5
 #define SW0_RELEASED 1
 #define SW1_RELEASED 1
-#define SW2_RELEASED 1
 
 void buttonsInit();
 
