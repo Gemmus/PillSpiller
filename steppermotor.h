@@ -8,15 +8,14 @@
 #define IN4 2
 #define ALIGNMENT 380
 #define COMPARTMENTS 8
-#define SLEEPTIME_BETWEEN 30000
+#define SLEEP_BETWEEN 30000
 
 /*  OPTOFORK  */
 #define OPTOFORK 28
 
 /*  PIEZO  */
-#define PILL_DROP_MS 100
-#define BLINK_TIMES 5
 #define PIEZO 27
+#define BLINK_TIMES 5
 
 void stepperMotorInit();
 void calibrateMotor();
@@ -25,5 +24,7 @@ void runMotorClockwise(int times);
 void optoforkInit();
 void optoFallingEdge();
 void piezoInit();
+void piezoFallingEdge();
+void gpioFallingEdge(uint gpio, uint32_t event_mask);
 
 #endif
