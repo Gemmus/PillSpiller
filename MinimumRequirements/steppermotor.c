@@ -1,6 +1,13 @@
 #include "pico/stdlib.h"
 #include "steppermotor.h"
+#include "eeprom.h"
 #include <stdio.h>
+
+#ifndef DEBUG_PRINT
+#define DBG_PRINT(f_, ...)  printf((f_), ##__VA_ARGS__)
+#else
+#define DBG_PRINT(f_, ...)
+#endif
 
 static const int stepper_array[] = {IN1, IN2, IN3, IN4};
 static const uint turning_sequence[8][4] = {{1, 0, 0, 0},
@@ -39,7 +46,8 @@ void calibrateMotor() {
         runMotorClockwise(1);
     }
     calibrated = true;
-    printf("Number of steps per revolution: %u\n", calibration_count);
+    DBG_PRINT("Number of steps per revolution: %u\n", calibration_count);
+    // TO DO: needs to send calibration count address the value
     runMotorAntiClockwise(ALIGNMENT);
 }
 
@@ -57,10 +65,9 @@ void runMotorAntiClockwise(int times) {
 
 void runMotorClockwise(int times) {
     for(; times > 0; times--) {
-        gpio_put(IN4, turning_sequence[row][3]);
-        gpio_put(IN3, turning_sequence[row][2]);
-        gpio_put(IN2, turning_sequence[row][1]);
-        gpio_put(IN1, turning_sequence[row][0]);
+        for (int j = 0; j < sizeof(stepper_array) / sizeof(stepper_array[0]); j++) {
+            gpio_put(stepper_array[j], turning_sequence[row][j]);
+        }
         revolution_counter++;
         if (--row <= -1) {
             row = 7;
