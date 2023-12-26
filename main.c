@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <ctype.h>
 #include "pico/stdlib.h"
 #include "pico/time.h"
@@ -18,12 +19,20 @@
 #define DBG_PRINT(f_, ...)
 #endif
 
+#define DEBUG
+#ifdef DEBUG
+#define COMPARTMENT_TIME  ( SLEEP_BETWEEN / 8 )
+#else
+#define COMPARTMENT_TIME  ( SLEEP_BETWEEN )
+#endif
+
 /////////////////////////////////////////////////////
 //             FUNCTION DECLARATIONS               //
 /////////////////////////////////////////////////////
 bool repeatingTimerCallback(struct repeating_timer *t);
 void resetValues();
 void dispensePills();
+void printBoot();
 
 /////////////////////////////////////////////////////
 //                GLOBAL VARIABLES                 //
@@ -31,10 +40,20 @@ void dispensePills();
 static volatile bool sw0_buttonEvent = false;
 static volatile bool sw2_buttonEvent = false;
 
+static bool lora_connected = false;
+
+static char retval_str[STRLEN];
+
 extern int calibration_count;
 extern bool calibrated;
 extern bool pill_detected;
 extern bool fallingEdge;
+
+static const char *fixed_msg[5] = {"Boot.\n",
+                                   "Calibrated. Waiting for button press to dispense pills.\n",
+                                   "Powered off during dispense. Motor was not turning.\n",
+                                   "Powered off during dispense. Motor was turning.\n",
+                                   "All pills dispensed. Waiting for button press to calibrate.\n"};
 
 /////////////////////////////////////////////////////
 //                 ENUM for STATES                 //
@@ -44,7 +63,10 @@ machineState machine = {
         .compartmentFinished = IN_THE_MIDDLE,
         .calibrationCount = 0,
         .compartmentsMoved = 0,
+        .logCounter = 0,
 };
+
+volatile int *log_counter = &machine.logCounter;
 
 /////////////////////////////////////////////////////
 //                     MAIN                        //
@@ -61,24 +83,34 @@ int main(void) {
     i2cInit();
 
     //eraseAll();
+#if 0
+    /* Initializes lorawan */
+    while (!lora_connected) {
+        lora_connected = loraInit();
+    }
+#endif
 
     struct repeating_timer timer;
     add_repeating_timer_ms(BUTTON_PERIOD, repeatingTimerCallback, NULL, &timer);
     gpio_set_irq_enabled_with_callback(OPTOFORK, GPIO_IRQ_EDGE_FALL, true, gpioFallingEdge);
     gpio_set_irq_enabled(PIEZO, GPIO_IRQ_EDGE_FALL, true);
 
-    DBG_PRINT("Boot\n"); /* MSG */
-
     if (readStruct(&machine)) {
         if (machine.currentState == DISPENSE_WAITING) {
             calibration_count = machine.calibrationCount;
+            printLog(); // for testing purposes, in the final it does not need to be here
             calibrated = true;
             allLedsOff();
+            printBoot();
 
             switch (machine.compartmentFinished) {
                 case IN_THE_MIDDLE:
+#if 0
+                    loraMsg(fixed_msg[3], strlen(fixed_msg[3]), retval_str);
+#endif
                     realignMotor();
-                    sleep_ms(SLEEP_BETWEEN / 8);
+                    DBG_PRINT("Restored last known state.\n");
+                    sleep_ms(COMPARTMENT_TIME);
                     machine.compartmentFinished = FINISHED;
                     writeStruct(&machine);
                     dispensePills();
@@ -86,14 +118,19 @@ int main(void) {
                     machine.currentState = CALIB_WAITING;
                     break;
                 case FINISHED:
+#if 0
+                    loraMsg(fixed_msg[2], strlen(fixed_msg[2]), retval_str);
+#endif
                     machine.compartmentsMoved++;
-                    sleep_ms(SLEEP_BETWEEN / 8);
+                    sleep_ms(COMPARTMENT_TIME);
                     dispensePills();
                     resetValues();
                     machine.currentState = CALIB_WAITING;
                     break;
             }
         }
+    } else {
+        printBoot();
     }
 
     while(true) {
@@ -107,7 +144,9 @@ int main(void) {
                     machine.calibrationCount = calibration_count;
                     writeStruct(&machine);
                     machine.compartmentsMoved = 1;
-                    //DBG_PRINT("Sent currentStat %d\n", currentState);
+#if 0
+                    loraMsg(fixed_msg[1], strlen(fixed_msg[1]), retval_str);
+#endif
                     break;
                 case DISPENSE_WAITING:
                     break;
@@ -168,11 +207,15 @@ bool repeatingTimerCallback(struct repeating_timer *t) {
 }
 
 void dispensePills() {
+    char dispensed_msg[STRLEN/2-3];
+    bool pill_dispensed = false;
+
     allLedsOff();
     pill_detected = false;
+
     /* start dispensing pills */
     for (; machine.compartmentsMoved < COMPARTMENTS; machine.compartmentsMoved++) {
-        DBG_PRINT("Compartments moved %d\n", machine.compartmentsMoved);
+
         for (int i = 0; i < (calibration_count / COMPARTMENTS + COMPARTMENTS - 1); i++) {
             runMotorClockwise(1);
             if (i == 0) {
@@ -180,21 +223,52 @@ void dispensePills() {
                 writeStruct(&machine);
             }
             if (i % 4 == 0) {
-                i2cWriteByte(I2C_MEM_SIZE/2, i/4);
+                i2cWriteByte_NoDelay(STEPPER_POSITION_ADDRESS, i/4);
             }
             if (true == pill_detected) {
                 pill_detected = false;
-                for (int j = 0; j < BLINK_TIMES; j++) {
-                    blink();
-                }
+                pill_dispensed = true;
             }
         }
+
         machine.compartmentFinished = FINISHED;
         writeStruct(&machine);
-        if ((COMPARTMENTS - 1) > machine.compartmentsMoved) {
-            sleep_ms(SLEEP_BETWEEN / 8);
+
+        if (true == pill_dispensed) {
+            /* msg of dispensed pill to eeprom and lorawan */
+            sprintf(dispensed_msg, "Day %d: Pill dispensed. Number of pills left: %d.\n", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
+            DBG_PRINT("%s", dispensed_msg);
+            writeLogEntry(dispensed_msg);
+            writeStruct(&machine); // Update log counter
+#if 0
+            loraMsg(dispensed_msg, strlen(dispensed_msg), retval_str);
+#endif
+            for (int j = 0; j < BLINK_TIMES; j++) {
+                blink();
+            }
         } else {
-            DBG_PRINT("All pills dispensed. Waiting for button press to calibrate.\n");
+            /* msg of not dispensed pill to eeprom and lorawan */
+            sprintf(dispensed_msg, "Day %d: Pill not dispensed. Number of pills left: %d.\n", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
+            DBG_PRINT("%s", dispensed_msg);
+            writeLogEntry(dispensed_msg);
+            writeStruct(&machine); // Update log counter
+#if 0
+            loraMsg(dispensed_msg, strlen(dispensed_msg), retval_str);
+#endif
+        }
+
+        if ((COMPARTMENTS - 1) > machine.compartmentsMoved) {
+            if (true == pill_dispensed) {
+                pill_dispensed = false;
+                sleep_ms(COMPARTMENT_TIME - BLINK_SLEEP_TIME * 2 * BLINK_TIMES);
+            } else {
+                sleep_ms(COMPARTMENT_TIME);
+            }
+        } else {
+            DBG_PRINT("%s", fixed_msg[4]);
+#if 0
+            loraMsg(fixed_msg[4], strlen(fixed_msg[4]), retval_str);
+#endif
         }
     }
 }
@@ -205,4 +279,13 @@ void resetValues() {
     machine.calibrationCount = 0;
     machine.compartmentsMoved = 0;
     writeStruct(&machine);
+}
+
+void printBoot() {
+    DBG_PRINT(fixed_msg[0]); /* MSG */
+    writeLogEntry(fixed_msg[0]);
+    writeStruct(&machine); // Update log counter
+#if 0
+    loraMsg(fixed_msg[0], strlen(fixed_msg[0]), retval_str);
+#endif
 }
