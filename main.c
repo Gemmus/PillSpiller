@@ -26,6 +26,8 @@
 #define COMPARTMENT_TIME  ( SLEEP_BETWEEN )
 #endif
 
+//#define LORAWAN_CONN
+
 /////////////////////////////////////////////////////
 //             FUNCTION DECLARATIONS               //
 /////////////////////////////////////////////////////
@@ -83,7 +85,7 @@ int main(void) {
     i2cInit();
 
     //eraseAll();
-#if 0
+#ifdef LORAWAN_CONN
     /* Initializes lorawan */
     while (!lora_connected) {
         lora_connected = loraInit();
@@ -105,7 +107,7 @@ int main(void) {
 
             switch (machine.compartmentFinished) {
                 case IN_THE_MIDDLE:
-#if 0
+#ifdef LORAWAN_CONN
                     loraMsg(fixed_msg[3], strlen(fixed_msg[3]), retval_str);
 #endif
                     realignMotor();
@@ -118,7 +120,7 @@ int main(void) {
                     machine.currentState = CALIB_WAITING;
                     break;
                 case FINISHED:
-#if 0
+#ifdef LORAWAN_CONN
                     loraMsg(fixed_msg[2], strlen(fixed_msg[2]), retval_str);
 #endif
                     machine.compartmentsMoved++;
@@ -144,7 +146,7 @@ int main(void) {
                     machine.calibrationCount = calibration_count;
                     writeStruct(&machine);
                     machine.compartmentsMoved = 1;
-#if 0
+#ifdef LORAWAN_CONN
                     loraMsg(fixed_msg[1], strlen(fixed_msg[1]), retval_str);
 #endif
                     break;
@@ -240,7 +242,7 @@ void dispensePills() {
             DBG_PRINT("%s", dispensed_msg);
             writeLogEntry(dispensed_msg);
             writeStruct(&machine); // Update log counter
-#if 0
+#ifdef LORAWAN_CONN
             loraMsg(dispensed_msg, strlen(dispensed_msg), retval_str);
 #endif
             for (int j = 0; j < BLINK_TIMES; j++) {
@@ -252,7 +254,7 @@ void dispensePills() {
             DBG_PRINT("%s", dispensed_msg);
             writeLogEntry(dispensed_msg);
             writeStruct(&machine); // Update log counter
-#if 0
+#ifdef LORAWAN_CONN
             loraMsg(dispensed_msg, strlen(dispensed_msg), retval_str);
 #endif
         }
@@ -266,7 +268,7 @@ void dispensePills() {
             }
         } else {
             DBG_PRINT("%s", fixed_msg[4]);
-#if 0
+#ifdef LORAWAN_CONN
             loraMsg(fixed_msg[4], strlen(fixed_msg[4]), retval_str);
 #endif
         }
@@ -285,7 +287,7 @@ void printBoot() {
     DBG_PRINT(fixed_msg[0]); /* MSG */
     writeLogEntry(fixed_msg[0]);
     writeStruct(&machine); // Update log counter
-#if 0
+#ifdef LORAWAN_CONN
     loraMsg(fixed_msg[0], strlen(fixed_msg[0]), retval_str);
 #endif
 }
