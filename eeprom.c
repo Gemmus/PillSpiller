@@ -9,14 +9,7 @@
 #define DBG_PRINT(f_, ...)
 #endif
 
-struct memoryAddresses{
-    uint16_t deviceStateAddr;
-    uint16_t compFinishedAddr;
-    uint16_t calibCountAddr;
-    uint16_t compMovedAddr;
-};
-
-volatile uint log_counter = 0;
+extern int *log_counter;
 
 void i2cInit() {
     i2c_init(i2c0, BAUDRATE);
@@ -24,7 +17,33 @@ void i2cInit() {
     gpio_set_function(I2C0_SCL_PIN, GPIO_FUNC_I2C);
 }
 
+void i2cWriteBytes(uint16_t address, const uint8_t *data, uint8_t length) {
+    assert(data != NULL);
+    assert(address < I2C_MEM_SIZE);
+    assert(0 < length);
+    assert(length <= I2C_MEM_PAGE_SIZE);
+    assert((address / I2C_MEM_PAGE_SIZE) == ((address + length - 1) / I2C_MEM_PAGE_SIZE));
+
+    uint8_t buffer[length+2];
+    buffer[0] = address >> 8; buffer[1] = address;
+    memcpy( &buffer[2], data, length);
+    i2c_write_blocking(i2c0, DEVADDR, buffer, sizeof(buffer), false);
+    sleep_ms(10);
+    //DBG_PRINT("Writing to address %d data %d\n", address, data);
+}
+
+void i2cWriteByte_NoDelay(uint16_t address, uint8_t data) {
+    assert(address < I2C_MEM_SIZE);
+
+    uint8_t buffer[3];
+    buffer[0] = address >> 8; buffer[1] = address; buffer[2] = data;
+    i2c_write_blocking(i2c0, DEVADDR, buffer, sizeof(buffer), false);
+    //DBG_PRINT("Writing to address %d data %d\n", address, data);
+}
+
 void i2cWriteByte(uint16_t address, uint8_t data) {
+    assert(address < I2C_MEM_SIZE);
+
     uint8_t buffer[3];
     buffer[0] = address >> 8; buffer[1] = address; buffer[2] = data;
     i2c_write_blocking(i2c0, DEVADDR, buffer, sizeof(buffer), false);
@@ -33,12 +52,26 @@ void i2cWriteByte(uint16_t address, uint8_t data) {
 }
 
 uint8_t i2cReadByte(uint16_t address) {
+    assert(address < I2C_MEM_SIZE);
+
     uint8_t buffer[2];
     buffer[0] = address >> 8; buffer[1] = address;
     i2c_write_blocking(i2c0, DEVADDR, buffer, 2, true);
     i2c_read_blocking(i2c0, DEVADDR, buffer, 1, false);
     //DBG_PRINT("Reading from address %d data %d\n", address, buffer[0]);
     return buffer[0];
+}
+
+void i2cReadBytes(uint16_t address, uint8_t *data, uint8_t length) {
+    assert(data != NULL);
+    assert(address < I2C_MEM_SIZE);
+    assert(0 < length);
+
+    uint8_t buffer[2];
+    buffer[0] = address >> 8; buffer[1] = address;
+    i2c_write_blocking(i2c0, DEVADDR, buffer, 2, true);
+    i2c_read_blocking(i2c0, DEVADDR, data, length, false);
+    //DBG_PRINT("Reading from address %d data %d\n", address, buffer[0]);
 }
 
 uint16_t crc16(const uint8_t *data_p, size_t length) {
@@ -53,39 +86,6 @@ uint16_t crc16(const uint8_t *data_p, size_t length) {
     return crc;
 }
 
-void writeInt(uint16_t address, int32_t data) {
-    uint8_t buffer[6];
-
-    memcpy(buffer, &data, sizeof(data));
-
-    uint16_t crc = crc16(buffer, sizeof(data));
-    buffer[sizeof(data) + 1] = (uint8_t)(crc >> 8);
-    buffer[sizeof(data)] = (uint8_t)crc;
-
-    uint16_t log_address = address;
-    for (int i = 0; i < (sizeof(data) + 2); i++) {
-        i2cWriteByte(log_address++, buffer[i]);
-    }
-}
-
-int32_t readInt(uint16_t address) {
-    uint8_t buffer[MAX_LOG_SIZE / 4];
-    for (int i = 0; i < sizeof(int32_t) + 2; i++) {
-        buffer[i] = i2cReadByte(address++);
-    }
-
-    uint16_t *read_crc16 = (uint16_t *) &buffer[sizeof(int32_t)];
-    uint16_t calc_crc16 = crc16(buffer, sizeof(int32_t));
-
-    if (*read_crc16 == calc_crc16) {
-        int32_t data;
-        memcpy(&data, buffer, sizeof(data));
-        return data;
-    } else {
-        return 0;
-    }
-}
-
 void writeStruct(const machineState *state) {
     machineState stateToWrite = *state;
 
@@ -94,18 +94,20 @@ void writeStruct(const machineState *state) {
 
     uint16_t write_address = I2C_MEM_SIZE - sizeof(stateToWrite);
     uint8_t *buffer = (uint8_t *) &stateToWrite;
-    for (int i = 0; i < sizeof(stateToWrite); i++) {
-        i2cWriteByte(write_address++, buffer[i]);
-    }
+    i2cWriteBytes(write_address, buffer, sizeof(stateToWrite));
+//    for (int i = 0; i < sizeof(stateToWrite); i++) {
+//        i2cWriteByte(write_address++, buffer[i]);
+//    }
 }
 
 bool readStruct(machineState *state) {
     machineState stateToRead;
     uint16_t read_address = I2C_MEM_SIZE - sizeof(stateToRead);
-    uint8_t *buffer = (uint8_t *) &stateToRead;
-    for (int i = 0; i < sizeof(stateToRead); i++) {
-        buffer[i] = i2cReadByte(read_address++);
-    }
+    i2cReadBytes(read_address, (uint8_t *) &stateToRead, sizeof(stateToRead));
+//    uint8_t *buffer = (uint8_t *) &stateToRead;
+//    for (int i = 0; i < sizeof(stateToRead); i++) {
+//        buffer[i] = i2cReadByte(read_address++);
+//    }
 
     uint16_t calc_crc16 = crc16((uint8_t *) &stateToRead, sizeof(stateToRead)-sizeof(stateToRead.crc16));
 
@@ -118,7 +120,7 @@ bool readStruct(machineState *state) {
 }
 
 void writeLogEntry(const char *message) {
-    if (log_counter >= MAX_LOG_ENTRY) {
+    if (*log_counter >= MAX_LOG_ENTRY) {
         printf("Maximum allowed log number reached. ");
         eraseLog();
     }
@@ -137,10 +139,12 @@ void writeLogEntry(const char *message) {
         buffer[message_length + 1] = (uint8_t) (crc >> 8);
         buffer[message_length + 2] = (uint8_t) crc;
 
-        uint16_t log_address = MAX_LOG_SIZE * log_counter++;
-        for(int i = 0; i < (message_length + 3); i++) {
-            i2cWriteByte(log_address++, buffer[i]);
-        }
+        uint16_t log_address = MAX_LOG_SIZE * *log_counter;
+        *log_counter = *log_counter + 1;
+        i2cWriteBytes(log_address, buffer, message_length+3);
+//        for(int i = 0; i < (message_length + 3); i++) {
+//            i2cWriteByte(log_address++, buffer[i]);
+//        }
         //printLog();
     } else {
         printf("Invalid input. Log message must contain at least one character.\n");
@@ -148,22 +152,18 @@ void writeLogEntry(const char *message) {
 }
 
 void printLog() {
-    if (0 != log_counter) {
-        uint16_t log_address = 0;
+    if (0 != *log_counter) {
+        uint16_t log_address = MEM_ADDR_START;
         uint8_t buffer[MAX_LOG_SIZE];
 
         printf("Printing log messages from memory:\n");
-        for (int i = 0; i < log_counter; i++) {
+        for (int i = 0; i < *log_counter; i++) {
             log_address = i * MAX_LOG_SIZE;
-            for (int j = 0; j < MAX_LOG_SIZE; j++) {
-                buffer[j] = i2cReadByte(log_address++);
-            }
-            /*
-            for(int k = 0; k < MAX_LOG_SIZE/2; k += 4)
-            {
-                printf("%x %x %x %x\n", buffer[k+0], buffer[k+1], buffer[k+2], buffer[k+3]);
-            }
-            */
+            i2cReadBytes(log_address, buffer, MAX_LOG_SIZE);
+//            for (int j = 0; j < MAX_LOG_SIZE; j++) {
+//                buffer[j] = i2cReadByte(log_address++);
+//            }
+
             int term_zero_index = 0;
             while (buffer[term_zero_index] != '\0') {
                 term_zero_index++;
@@ -193,7 +193,7 @@ void eraseLog() {
         i2cWriteByte(log_address, 0);
         log_address += MAX_LOG_SIZE;
     }
-    log_counter = 0;
+    *log_counter = 0;
     printf(" done.\n\n");
 }
 
