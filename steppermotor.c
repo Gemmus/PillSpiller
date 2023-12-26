@@ -1,6 +1,7 @@
 #include "pico/stdlib.h"
 #include "steppermotor.h"
 #include <stdio.h>
+#include "eeprom.h"
 
 #ifndef DEBUG_PRINT
 #define DBG_PRINT(f_, ...)  printf((f_), ##__VA_ARGS__)
@@ -19,6 +20,8 @@ static const uint turning_sequence[8][4] = {{1, 0, 0, 0},
                                             {1, 0, 0, 1}};
 
 static volatile int row = 0;
+
+volatile int calibration_count;
 volatile int revolution_counter = 0;
 volatile int calibration_count = 0;
 volatile bool calibrated = false;
@@ -70,6 +73,37 @@ void runMotorClockwise(int times) {
         }
         sleep_ms(4);
     }
+}
+
+void realignMotor() {
+    int stored_position = i2cReadByte(I2C_MEM_SIZE / 2) * 4;
+    while (0 != stored_position--) {
+        runMotorAntiClockwise(1);
+    }
+
+#if 0
+    while (false == fallingEdge) {
+        runMotorAntiClockwise(1);
+    }
+    fallingEdge = false;
+    DBG_PRINT("Found falling edge\n");
+    sleep_ms(5000);
+
+    for (int j = 0; j < 1; j++) {
+        DBG_PRINT("Int j = %d", j);
+        for (int k = 0; k < (calibration_count / COMPARTMENTS + COMPARTMENTS - 1); k++) {
+            runMotorAntiClockwise(1);
+        }
+    }
+    DBG_PRINT("Went back 1 compartments\n");
+    sleep_ms(5000);
+
+    for (int i = 0; i < (calibration_count / COMPARTMENTS + COMPARTMENTS - 1 - ALIGNMENT); i++) {
+        runMotorAntiClockwise(1);
+    }
+    DBG_PRINT("Alignment to initial state.\n");
+    sleep_ms(5000);
+#endif
 }
 
 void optoforkInit() {
