@@ -82,12 +82,15 @@ int main(void) {
                     machine.compartmentFinished = FINISHED;
                     writeStruct(&machine);
                     dispensePills();
+                    resetValues();
+                    machine.currentState = CALIB_WAITING;
                     break;
                 case FINISHED:
                     machine.compartmentsMoved++;
                     sleep_ms(SLEEP_BETWEEN / 8);
                     dispensePills();
                     resetValues();
+                    machine.currentState = CALIB_WAITING;
                     break;
             }
         }
@@ -188,7 +191,6 @@ void dispensePills() {
         }
         machine.compartmentFinished = FINISHED;
         writeStruct(&machine);
-        DBG_PRINT("Before comparison: Compartments moved %d\n", machine.compartmentsMoved);
         if ((COMPARTMENTS - 1) > machine.compartmentsMoved) {
             sleep_ms(SLEEP_BETWEEN / 8);
         } else {
