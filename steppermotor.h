@@ -19,6 +19,7 @@
 
 void stepperMotorInit();
 void calibrateMotor();
+void realignMotor();
 void runMotorAntiClockwise(int times);
 void runMotorClockwise(int times);
 void optoforkInit();
