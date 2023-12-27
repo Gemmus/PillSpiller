@@ -13,7 +13,7 @@
 #include "eeprom.h"
 #include "steppermotor.h" // includes stepper motor, optofork and piezo related codes
 
-#ifndef DEBUG_PRINT
+#ifdef DEBUG_PRINT
 #define DBG_PRINT(f_, ...)  printf((f_), ##__VA_ARGS__)
 #else
 #define DBG_PRINT(f_, ...)
@@ -23,10 +23,10 @@
 #ifdef DEBUG
 #define COMPARTMENT_TIME  ( SLEEP_BETWEEN / 8 )
 #else
-#define COMPARTMENT_TIME  ( SLEEP_BETWEEN )
+#define COMPARTMENT_TIME  ( SLEEP_BETWEEN * 2 / 3 )
 #endif
 
-//#define LORAWAN_CONN
+#define LORAWAN_CONN
 
 /////////////////////////////////////////////////////
 //             FUNCTION DECLARATIONS               //
@@ -51,11 +51,11 @@ extern bool calibrated;
 extern bool pill_detected;
 extern bool fallingEdge;
 
-static const char *fixed_msg[5] = {"Boot.\n",
-                                   "Calibrated. Waiting for button press to dispense pills.\n",
-                                   "Powered off during dispense. Motor was not turning.\n",
-                                   "Powered off during dispense. Motor was turning.\n",
-                                   "All pills dispensed. Waiting for button press to calibrate.\n"};
+static const char *fixed_msg[5] = {"Boot.",
+                                   "Calibrated. Waiting for button press to dispense pills.",
+                                   "Powered off during dispense. Motor was not turning.",
+                                   "Powered off during dispense. Motor was turning.",
+                                   "All pills dispensed. Waiting for button press to calibrate."};
 
 /////////////////////////////////////////////////////
 //                 ENUM for STATES                 //
@@ -84,11 +84,19 @@ int main(void) {
     piezoInit();
     i2cInit();
 
-    //eraseAll();
+    //eraseAll(); /* Deletes all data from eeprom from log area */
+
 #ifdef LORAWAN_CONN
     /* Initializes lorawan */
     while (!lora_connected) {
         lora_connected = loraInit();
+    }
+#endif
+
+#if 0
+    /* to set the uart TIMEOUT value: */
+    if (true == loraCommunication("AT+UART=TIMEOUT,0\r\n", STD_WAITING_TIME, retval_str)) {
+        printf("%s\n",retval_str);
     }
 #endif
 
@@ -107,8 +115,11 @@ int main(void) {
 
             switch (machine.compartmentFinished) {
                 case IN_THE_MIDDLE:
+
 #ifdef LORAWAN_CONN
-                    loraMsg(fixed_msg[3], strlen(fixed_msg[3]), retval_str);
+                    if (0 != machine.compartmentsMoved) {
+                        loraMsg(fixed_msg[3], strlen(fixed_msg[3]), retval_str);
+                    }
 #endif
                     realignMotor();
                     DBG_PRINT("Restored last known state.\n");
@@ -238,20 +249,20 @@ void dispensePills() {
 
         if (true == pill_dispensed) {
             /* msg of dispensed pill to eeprom and lorawan */
-            sprintf(dispensed_msg, "Day %d: Pill dispensed. Number of pills left: %d.\n", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
-            DBG_PRINT("%s", dispensed_msg);
+            sprintf(dispensed_msg, "Day %d: Pill dispensed. Number of pills left: %d.", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
+            DBG_PRINT("%s\n", dispensed_msg);
             writeLogEntry(dispensed_msg);
             writeStruct(&machine); // Update log counter
 #ifdef LORAWAN_CONN
             loraMsg(dispensed_msg, strlen(dispensed_msg), retval_str);
 #endif
+        } else {
             for (int j = 0; j < BLINK_TIMES; j++) {
                 blink();
             }
-        } else {
             /* msg of not dispensed pill to eeprom and lorawan */
-            sprintf(dispensed_msg, "Day %d: Pill not dispensed. Number of pills left: %d.\n", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
-            DBG_PRINT("%s", dispensed_msg);
+            sprintf(dispensed_msg, "Day %d: Pill not dispensed. Number of pills left: %d.", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
+            DBG_PRINT("%s\n", dispensed_msg);
             writeLogEntry(dispensed_msg);
             writeStruct(&machine); // Update log counter
 #ifdef LORAWAN_CONN
@@ -267,7 +278,7 @@ void dispensePills() {
                 sleep_ms(COMPARTMENT_TIME);
             }
         } else {
-            DBG_PRINT("%s", fixed_msg[4]);
+            DBG_PRINT("%s\n", fixed_msg[4]);
 #ifdef LORAWAN_CONN
             loraMsg(fixed_msg[4], strlen(fixed_msg[4]), retval_str);
 #endif
@@ -284,7 +295,7 @@ void resetValues() {
 }
 
 void printBoot() {
-    DBG_PRINT(fixed_msg[0]); /* MSG */
+    DBG_PRINT("%s\n", fixed_msg[0]); /* MSG */
     writeLogEntry(fixed_msg[0]);
     writeStruct(&machine); // Update log counter
 #ifdef LORAWAN_CONN
