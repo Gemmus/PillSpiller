@@ -12,7 +12,7 @@ static const int button_arr[] = {SW_0, SW_2};
 //////////////////////////////////////////////////
 
 /**********************************************************************************************************************
- * \brief: Initializes the SW_0 and SW_2 buttons
+ * \brief: Initializes the SW_0 and SW_2 buttons.
  *
  * \param:
  *
