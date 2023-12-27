@@ -2,7 +2,6 @@
 #define BUTTON
 
 #define SW_0 9
-#define SW_1 8
 #define SW_2 7
 #define BUTTON_PERIOD 10 // Button sampling timer period in ms
 #define BUTTON_FILTER 5
