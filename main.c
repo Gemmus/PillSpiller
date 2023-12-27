@@ -4,7 +4,6 @@
 #include "pico/stdlib.h"
 #include "pico/time.h"
 #include "hardware/gpio.h"
-#include "hardware/irq.h"
 
 #include "led.h"
 #include "button.h"
@@ -31,6 +30,7 @@
 /////////////////////////////////////////////////////
 //             FUNCTION DECLARATIONS               //
 /////////////////////////////////////////////////////
+
 bool repeatingTimerCallback(struct repeating_timer *t);
 void resetValues();
 void dispensePills();
@@ -39,6 +39,7 @@ void printBoot();
 /////////////////////////////////////////////////////
 //                GLOBAL VARIABLES                 //
 /////////////////////////////////////////////////////
+
 static volatile bool sw0_buttonEvent = false;
 static volatile bool sw2_buttonEvent = false;
 
@@ -58,8 +59,9 @@ static const char *fixed_msg[5] = {"Boot.",
                                    "All pills dispensed. Waiting for button press to calibrate."};
 
 /////////////////////////////////////////////////////
-//                 ENUM for STATES                 //
+//                     STRUCT                      //
 /////////////////////////////////////////////////////
+
 machineState machine = {
         .currentState = CALIB_WAITING,
         .compartmentFinished = IN_THE_MIDDLE,
@@ -73,6 +75,7 @@ volatile int *log_counter = &machine.logCounter;
 /////////////////////////////////////////////////////
 //                     MAIN                        //
 /////////////////////////////////////////////////////
+
 int main(void) {
 
     stdio_init_all();
@@ -88,9 +91,10 @@ int main(void) {
 
 #ifdef LORAWAN_CONN
     /* Initializes lorawan */
+    /*
     while (!lora_connected) {
         lora_connected = loraInit();
-    }
+    }*/
 #endif
 
 #if 0
@@ -128,6 +132,7 @@ int main(void) {
                     writeStruct(&machine);
                     dispensePills();
                     resetValues();
+                    printLog();
                     machine.currentState = CALIB_WAITING;
                     break;
                 case FINISHED:
@@ -138,6 +143,7 @@ int main(void) {
                     sleep_ms(COMPARTMENT_TIME);
                     dispensePills();
                     resetValues();
+                    printLog();
                     machine.currentState = CALIB_WAITING;
                     break;
             }
@@ -174,6 +180,7 @@ int main(void) {
                 case DISPENSE_WAITING:
                     dispensePills();
                     resetValues();
+                    printLog();
                     break;
             }
         }
@@ -185,11 +192,24 @@ int main(void) {
     return 0;
 }
 
+/////////////////////////////////////////////////////
+//                   FUNCTIONS                     //
+/////////////////////////////////////////////////////
+
+/**********************************************************************************************************************
+ * \brief: Function called by timer to check if SW_0 or SW_2 buttons were pressed. Filtered button press sets the
+ *         button event flag respectively.
+ *
+ * \param: struct repeating_timer *t, not used.
+ *
+ * \return: boolean, returns true everytime function is called.
+ *
+ * \remarks:
+ **********************************************************************************************************************/
 bool repeatingTimerCallback(struct repeating_timer *t) {
     /* SW0 */
     static uint sw0_button_state = 0, sw0_filter_counter = 0;
-    uint sw0_new_state = 1;
-    sw0_new_state = gpio_get(SW_0);
+    uint sw0_new_state = gpio_get(SW_0);
     if (sw0_button_state != sw0_new_state) {
         if (++sw0_filter_counter >= BUTTON_FILTER) {
             sw0_button_state = sw0_new_state;
@@ -203,8 +223,7 @@ bool repeatingTimerCallback(struct repeating_timer *t) {
     }
     /* SW2 */
     static uint sw2_button_state = 0, sw2_filter_counter = 0;
-    uint sw2_new_state = 1;
-    sw2_new_state = gpio_get(SW_2);
+    uint sw2_new_state = gpio_get(SW_2);
     if (sw2_button_state != sw2_new_state) {
         if (++sw2_filter_counter >= BUTTON_FILTER) {
             sw2_button_state = sw2_new_state;
@@ -219,6 +238,17 @@ bool repeatingTimerCallback(struct repeating_timer *t) {
     return true;
 }
 
+/**********************************************************************************************************************
+ * \brief: Dispenses 7 pills resided in 7 different compartments using stepper motor. Controls led lights and blinking
+ *         according to events. During the process the function also updates the states and counters, and creates log
+ *         messages respectively that are transmitted both to EEPROM and via LoRaWAN to network.
+ *
+ * \param:
+ *
+ * \return:
+ *
+ * \remarks:
+ **********************************************************************************************************************/
 void dispensePills() {
     char dispensed_msg[STRLEN/2-3];
     bool pill_dispensed = false;
@@ -252,7 +282,7 @@ void dispensePills() {
             sprintf(dispensed_msg, "Day %d: Pill dispensed. Number of pills left: %d.", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
             DBG_PRINT("%s\n", dispensed_msg);
             writeLogEntry(dispensed_msg);
-            writeStruct(&machine); // Update log counter
+            writeStruct(&machine);
 #ifdef LORAWAN_CONN
             loraMsg(dispensed_msg, strlen(dispensed_msg), retval_str);
 #endif
@@ -264,7 +294,7 @@ void dispensePills() {
             sprintf(dispensed_msg, "Day %d: Pill not dispensed. Number of pills left: %d.", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
             DBG_PRINT("%s\n", dispensed_msg);
             writeLogEntry(dispensed_msg);
-            writeStruct(&machine); // Update log counter
+            writeStruct(&machine);
 #ifdef LORAWAN_CONN
             loraMsg(dispensed_msg, strlen(dispensed_msg), retval_str);
 #endif
@@ -286,6 +316,15 @@ void dispensePills() {
     }
 }
 
+/**********************************************************************************************************************
+ * \brief: Resets the variables of the struct to their initial states and updates these values to EEPROM.
+ *
+ * \param:
+ *
+ * \return:
+ *
+ * \remarks: machine.logCounter is not reset to persist the existing log messages.
+ **********************************************************************************************************************/
 void resetValues() {
     machine.currentState = CALIB_WAITING;
     machine.compartmentFinished = IN_THE_MIDDLE;
@@ -294,6 +333,15 @@ void resetValues() {
     writeStruct(&machine);
 }
 
+/**********************************************************************************************************************
+ * \brief: Transmits "Boot." to EEPROM as a log message and also via LoRaWAN to the network.
+ *
+ * \param:
+ *
+ * \return:
+ *
+ * \remarks:
+ **********************************************************************************************************************/
 void printBoot() {
     DBG_PRINT("%s\n", fixed_msg[0]); /* MSG */
     writeLogEntry(fixed_msg[0]);
