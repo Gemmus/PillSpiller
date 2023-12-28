@@ -9,7 +9,7 @@ The program is implemented in the C language and built in the Pico SDK environme
 
 <b>Components:</b>
 <ul>
-      <li><a href="https://www.raspberrypi.com/documentation/microcontrollers/raspberry-pi-pico.html">Raspberry Pi Pico W</a></li>
+      <li><a href="https://www.raspberrypi.com/documentation/microcontrollers/raspberry-pi-pico.html">Raspberry Pi Pico WH</a></li>
       <li><a href="https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html">Raspberry Pi Debug Probe</a></li>
       <li>LoRaWAN module - <a href="https://media.digikey.com/pdf/Data%20Sheets/Seeed%20Technology/Grove_LoRa-E5_Web.pdf">Grove LoRa-E5</a></li>
       <li>I2C EEPROM - <a href="https://www.elecrow.com/wiki/index.php?title=Crowtail-_I2C_EEPROM">Crowtail</a></li>
@@ -51,3 +51,5 @@ Device can recalibrate automatically after power off during middle of a turn wit
 pills that still remain.
 
 ## Operation Principle
+![image](https://github.com/Gemmus/PillSpiller/assets/112064697/ef09bd14-0aaf-4dc6-9c49-c21121773221)
+<br><small>_Figure 2: Logic of implemented program._</small>
