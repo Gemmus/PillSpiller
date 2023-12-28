@@ -3,7 +3,7 @@ Second year embedded project programmed to dispense pills using Raspberry Pi Pic
 The program is implemented in the C language and built in the Pico SDK environment.
 
 ## Device
-![image](https://github.com/Gemmus/PillSpiller/assets/112064697/641524c7-6315-4df3-8b06-687cce7da123)
+![image](https://github.com/Gemmus/PillSpiller/assets/112064697/6cee24b3-4210-494f-9be9-1fda59376eff)
 <br>
 <small>_Figure 1: Main parts of the pill dispenser device._</small>
 
