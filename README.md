@@ -51,5 +51,6 @@ Device can recalibrate automatically after power off during middle of a turn wit
 pills that still remain.
 
 ## Operation Principle
-![image](https://github.com/Gemmus/PillSpiller/assets/112064697/b2febd69-23f4-40a7-ba70-4cebc876e3d0)
+![image](https://github.com/Gemmus/PillSpiller/assets/112064697/ea6f3eb7-b57f-43e9-afb6-0d9a6daf03b1)
 <br><small>_Figure 2: Logic of implemented program._</small>
+<br> 
