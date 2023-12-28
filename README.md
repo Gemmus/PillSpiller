@@ -1,6 +1,11 @@
 # PillSpiller
-Embedded project programmed to dispense pills using Raspberry Pi Pico WH.
+Second year embedded project programmed to dispense pills using Raspberry Pi Pico WH.
+The program is implemented in the C language and built in the Pico SDK environment.
 
+## Main parts of the device
+![image](https://github.com/Gemmus/PillSpiller/assets/112064697/641524c7-6315-4df3-8b06-687cce7da123)
+<br>
+Figure 1: Main parts of the pill dispenser device.
 
 ## Project goal
 The goal of the project is to implement an automated pill dispenser that dispenses daily medicine to
