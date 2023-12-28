@@ -9,13 +9,14 @@ The program is implemented in the C language and built in the Pico SDK environme
 
 <b>Components:</b>
 <ul>
-      <li>Raspberry Pi Pico W</li>
-      <li> PicoProbe debugger</li>
-      <li>LoRaWAN module</li>
-      <li>Crowtail - I2C EEPROM</li>
-      <li>Stepper motor driver</li>
+      <li><a href="https://www.raspberrypi.com/documentation/microcontrollers/raspberry-pi-pico.html">Raspberry Pi Pico W</a></li>
+      <li><a href="https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html">Raspberry Pi Debug Probe</a></li>
+      <li>LoRaWAN module - <a href="https://media.digikey.com/pdf/Data%20Sheets/Seeed%20Technology/Grove_LoRa-E5_Web.pdf">Grove LoRa-E5</a></li>
+      <li>I2C EEPROM - <a href="https://www.elecrow.com/wiki/index.php?title=Crowtail-_I2C_EEPROM">Crowtail</a></li>
+      <li>Stepper motor driver - <a href="https://elecrow.com/wiki/index.php?title=ULN2003_Stepper_Motor_Driver">Elecrow ULN2003</a></li>
       <li>Dispenser: base and wheel</li>
-      <li>Opto Sensor</li>
+      <li>Stepper motor - <a href="https://www.mouser.com/datasheet/2/758/stepd-01-data-sheet-1143075.pdf">28BYJ-48</a></li>
+      <li>Optical Sensor</li>
       <li>Piezo Sensor</li>
 </ul>
 
