@@ -54,7 +54,7 @@ void stepperMotorInit() {
 
 /**********************************************************************************************************************
  * \brief: Calibrates motor by rotating the stepper motor and counting the number opf steps between two falling edge
- *         of the optofork. In the end, the motor aligns to match the slot of pill drop area.
+ *         of the optofork. In the end, the motor aligns dispenser wheel to match the slot of pill drop area.
  *
  * \param:
  *
@@ -103,9 +103,9 @@ void runMotorAntiClockwise(int times) {
  *
  * \param: integer
  *
- * \return: 
+ * \return:
  *
- * \remarks: 
+ * \remarks:
  **********************************************************************************************************************/
 void runMotorClockwise(int times) {
     for(; times > 0; times--) {
