@@ -20,9 +20,9 @@
 
 #define DEBUG
 #ifdef DEBUG
-#define COMPARTMENT_TIME  ( SLEEP_BETWEEN / 8 )
+#define COMPARTMENT_TIME  ( SLEEP_BETWEEN / (8 * 3) )
 #else
-#define COMPARTMENT_TIME  ( SLEEP_BETWEEN * 2 / 3 )
+#define COMPARTMENT_TIME  ( SLEEP_BETWEEN / 3 )
 #endif
 
 #define LORAWAN_CONN
@@ -34,7 +34,8 @@
 bool repeatingTimerCallback(struct repeating_timer *t);
 void resetValues();
 void dispensePills();
-void printBoot();
+//void printBoot();
+void eepromLorawanComm(const char* message, size_t msg_size);
 
 /////////////////////////////////////////////////////
 //                GLOBAL VARIABLES                 //
@@ -52,11 +53,13 @@ extern bool calibrated;
 extern bool pill_detected;
 extern bool fallingEdge;
 
-static const char *fixed_msg[5] = {"Boot.",
+static const char *fixed_msg[7] = {"Boot.",
                                    "Calibrated. Waiting for button press to dispense pills.",
                                    "Powered off during dispense. Motor was not turning.",
                                    "Powered off during dispense. Motor was turning.",
-                                   "All pills dispensed. Waiting for button press to calibrate."};
+                                   "All pills dispensed. Waiting for button press to calibrate.",
+                                   "Device booted after calibration. Waiting for button press to start dispensing pills.",
+                                   "Waiting for button press to calibrate."};
 
 /////////////////////////////////////////////////////
 //                     STRUCT                      //
@@ -110,13 +113,18 @@ int main(void) {
     gpio_set_irq_enabled(PIEZO, GPIO_IRQ_EDGE_FALL, true);
 
     if (readStruct(&machine)) {
+        //DBG_PRINT("Recovered data:\nCurrentState: %d\nCompartmentsMoved: %d\nCompartmentFinished: %d\nCalibrationCount: %d\n", machine.currentState, machine.compartmentsMoved, machine.compartmentFinished, machine.calibrationCount);
+        if (machine.currentState == CALIB_WAITING) {
+            eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
+            eepromLorawanComm(fixed_msg[6], strlen(fixed_msg[6]));
+        }
         if (machine.currentState == DISPENSE_WAITING) {
             calibration_count = machine.calibrationCount;
-            printLog(); // for testing purposes, in the final it does not need to be here
+            printLog();
             calibrated = true;
             allLedsOff();
-            printBoot();
-
+            eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
+            
             switch (machine.compartmentFinished) {
                 case IN_THE_MIDDLE:
 
@@ -136,20 +144,26 @@ int main(void) {
                     machine.currentState = CALIB_WAITING;
                     break;
                 case FINISHED:
-#ifdef LORAWAN_CONN
-                    loraMsg(fixed_msg[2], strlen(fixed_msg[2]), retval_str);
-#endif
-                    machine.compartmentsMoved++;
-                    sleep_ms(COMPARTMENT_TIME);
-                    dispensePills();
-                    resetValues();
-                    printLog();
-                    machine.currentState = CALIB_WAITING;
-                    break;
+                    if (0 == machine.compartmentsMoved) {
+                        eepromLorawanComm(fixed_msg[5], strlen(fixed_msg[5]));
+                        machine.compartmentsMoved++;
+                        allLedsOn();
+                        break;
+                    } else {
+                        machine.compartmentsMoved++;
+                        eepromLorawanComm(fixed_msg[2], strlen(fixed_msg[2]));
+                        sleep_ms(COMPARTMENT_TIME);
+                        dispensePills();
+                        resetValues();
+                        printLog();
+                        machine.currentState = CALIB_WAITING;
+                        break;
+                    }
             }
         }
     } else {
-        printBoot();
+        eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
+        eepromLorawanComm(fixed_msg[6], strlen(fixed_msg[6]));
     }
 
     while(true) {
@@ -161,6 +175,7 @@ int main(void) {
                     allLedsOn();
                     machine.currentState = DISPENSE_WAITING;
                     machine.calibrationCount = calibration_count;
+                    machine.compartmentFinished = 1;
                     writeStruct(&machine);
                     machine.compartmentsMoved = 1;
 #ifdef LORAWAN_CONN
@@ -278,26 +293,14 @@ void dispensePills() {
         writeStruct(&machine);
 
         if (true == pill_dispensed) {
-            /* msg of dispensed pill to eeprom and lorawan */
             sprintf(dispensed_msg, "Day %d: Pill dispensed. Number of pills left: %d.", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
-            DBG_PRINT("%s\n", dispensed_msg);
-            writeLogEntry(dispensed_msg);
-            writeStruct(&machine);
-#ifdef LORAWAN_CONN
-            loraMsg(dispensed_msg, strlen(dispensed_msg), retval_str);
-#endif
+            eepromLorawanComm(dispensed_msg, strlen(dispensed_msg));
         } else {
             for (int j = 0; j < BLINK_TIMES; j++) {
                 blink();
             }
-            /* msg of not dispensed pill to eeprom and lorawan */
             sprintf(dispensed_msg, "Day %d: Pill not dispensed. Number of pills left: %d.", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
-            DBG_PRINT("%s\n", dispensed_msg);
-            writeLogEntry(dispensed_msg);
-            writeStruct(&machine);
-#ifdef LORAWAN_CONN
-            loraMsg(dispensed_msg, strlen(dispensed_msg), retval_str);
-#endif
+            eepromLorawanComm(dispensed_msg, strlen(dispensed_msg));
         }
 
         if ((COMPARTMENTS - 1) > machine.compartmentsMoved) {
@@ -308,10 +311,7 @@ void dispensePills() {
                 sleep_ms(COMPARTMENT_TIME);
             }
         } else {
-            DBG_PRINT("%s\n", fixed_msg[4]);
-#ifdef LORAWAN_CONN
-            loraMsg(fixed_msg[4], strlen(fixed_msg[4]), retval_str);
-#endif
+            eepromLorawanComm(fixed_msg[4], strlen(fixed_msg[4]));
         }
     }
 }
@@ -342,11 +342,30 @@ void resetValues() {
  *
  * \remarks:
  **********************************************************************************************************************/
-void printBoot() {
-    DBG_PRINT("%s\n", fixed_msg[0]); /* MSG */
+/*void printBoot() {
+    DBG_PRINT("%s\n", fixed_msg[0]);
     writeLogEntry(fixed_msg[0]);
     writeStruct(&machine); // Update log counter
 #ifdef LORAWAN_CONN
     loraMsg(fixed_msg[0], strlen(fixed_msg[0]), retval_str);
+#endif
+}
+*/
+/**********************************************************************************************************************
+ * \brief: Transmits passed message to EEPROM as a log message and also via LoRaWAN to the network. Updates the struct
+ *         to EEPROM.
+ *
+ * \param: 2 params: pointer to a const char message and its length as size_t type.
+ *
+ * \return:
+ *
+ * \remarks:
+ **********************************************************************************************************************/
+void eepromLorawanComm(const char* message, size_t msg_size) {
+    //DBG_PRINT("%s\n", message);
+    writeStruct(&machine);
+    writeLogEntry(message);
+#ifdef LORAWAN_CONN
+    loraMsg(message, msg_size, retval_str);
 #endif
 }
