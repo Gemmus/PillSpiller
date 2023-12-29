@@ -73,7 +73,7 @@ void i2cWriteBytes(uint16_t address, const uint8_t *data, uint8_t length) {
     buffer[0] = address >> 8; buffer[1] = address;
     memcpy( &buffer[2], data, length);
     i2c_write_blocking(i2c0, DEVADDR, buffer, sizeof(buffer), false);
-    sleep_ms(10);
+    sleep_ms(I2C_MEM_WRITE_TIME);
 }
 
 /**********************************************************************************************************************
@@ -108,7 +108,7 @@ void i2cWriteByte(uint16_t address, uint8_t data) {
     uint8_t buffer[3];
     buffer[0] = address >> 8; buffer[1] = address; buffer[2] = data;
     i2c_write_blocking(i2c0, DEVADDR, buffer, sizeof(buffer), false);
-    sleep_ms(10);
+    sleep_ms(I2C_MEM_WRITE_TIME);
 }
 
 /**********************************************************************************************************************
@@ -259,7 +259,7 @@ void printLog() {
             }
 
             if(0 == crc16(buffer, (term_zero_index + 3)) && buffer[0] != 0 && (term_zero_index < (MAX_LOG_SIZE - 2))) {
-                DBG_PRINT("Log #%d\n", i + 1);
+                DBG_PRINT("Log #%d: ", i + 1);
                 int index = 0;
                 while (buffer[index]) {
                     DBG_PRINT("%c", buffer[index++]);
