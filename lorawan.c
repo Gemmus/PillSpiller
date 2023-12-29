@@ -6,7 +6,7 @@
 #include "uart.h"
 #include "lorawan.h"
 
-#ifndef DEBUG_PRINT
+#ifdef DEBUG_PRINT
 #define DBG_PRINT(f_, ...)  printf((f_), ##__VA_ARGS__)
 #else
 #define DBG_PRINT(f_, ...)
@@ -105,7 +105,7 @@ bool loraMsg(const char* message, size_t msg_size, char* return_message) {
     strncpy(&lorawan_message[strlen(start_tag)], message, STRLEN-strlen(start_tag)-strlen(end_tag)-1);
     strcat(lorawan_message, end_tag);
     lorawan_message[STRLEN-1] = '\0';
-    DBG_PRINT("%s", lorawan_message);
+    //printf("%s", lorawan_message);
     if(true == loraCommunication(lorawan_message, MSG_WAITING_TIME, return_message)) {
         return true;
     } else {
@@ -127,7 +127,7 @@ bool retvalChecker(const int index) {
 
     if (true == loraCommunication(lorawan[index].command, lorawan[index].sleep_time, return_message)) {
         if (strcmp(lorawan[index].retval, return_message) == 0) {
-            //DBG_PRINT("Comparison->same for: %s\n", return_message);
+            DBG_PRINT("Comparison->same for: %s\n", return_message);
             return true;
         } else {
             DBG_PRINT("Comparison->no match, return_message: %s lorawan[%d].retval: %s\n", return_message, index, lorawan[index].retval);
