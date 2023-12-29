@@ -19,23 +19,30 @@
 #endif
 
 #define DEBUG
-#ifdef DEBUG
-#define COMPARTMENT_TIME  ( SLEEP_BETWEEN / (8 * 3) )
+#ifndef DEBUG
+#define COMPARTMENT_TIME  ( SLEEP_BETWEEN / 8 )
 #else
-#define COMPARTMENT_TIME  ( SLEEP_BETWEEN / 3 )
+#define COMPARTMENT_TIME  ( SLEEP_BETWEEN )
 #endif
 
 #define LORAWAN_CONN
+
+#ifdef LORAWAN_CONN
+#define LORAWAN_COMM_TIME  ( MSG_WAITING_TIME )
+#else
+#define LORAWAN_COMM_TIME  ( 0 )
+#endif
 
 /////////////////////////////////////////////////////
 //             FUNCTION DECLARATIONS               //
 /////////////////////////////////////////////////////
 
 bool repeatingTimerCallback(struct repeating_timer *t);
+bool blinkTimerCallback(struct repeating_timer *t);
 void resetValues();
 void dispensePills();
-//void printBoot();
 void eepromLorawanComm(const char* message, size_t msg_size);
+void noDetectBlink();
 
 /////////////////////////////////////////////////////
 //                GLOBAL VARIABLES                 //
@@ -54,12 +61,12 @@ extern bool pill_detected;
 extern bool fallingEdge;
 
 static const char *fixed_msg[7] = {"Boot.",
-                                   "Calibrated. Waiting for button press to dispense pills.",
+                                   "Calibrated. Waiting for button to dispense pills.",
                                    "Powered off during dispense. Motor was not turning.",
                                    "Powered off during dispense. Motor was turning.",
-                                   "All pills dispensed. Waiting for button press to calibrate.",
-                                   "Device booted after calibration. Waiting for button press to start dispensing pills.",
-                                   "Waiting for button press to calibrate."};
+                                   "All pills dispensed. Waiting for button to calibrate.",
+                                   "Booted after calibration. Waiting for button to dispense.",
+                                   "Waiting for button to calibrate."};
 
 /////////////////////////////////////////////////////
 //                     STRUCT                      //
@@ -74,6 +81,9 @@ machineState machine = {
 };
 
 volatile int *log_counter = &machine.logCounter;
+
+static struct repeating_timer blink_timer;
+static uint32_t blink_counter;
 
 /////////////////////////////////////////////////////
 //                     MAIN                        //
@@ -107,13 +117,12 @@ int main(void) {
     }
 #endif
 
-    struct repeating_timer timer;
-    add_repeating_timer_ms(BUTTON_PERIOD, repeatingTimerCallback, NULL, &timer);
+    struct repeating_timer button_timer;
+    add_repeating_timer_ms(BUTTON_PERIOD, repeatingTimerCallback, NULL, &button_timer);
     gpio_set_irq_enabled_with_callback(OPTOFORK, GPIO_IRQ_EDGE_FALL, true, gpioFallingEdge);
     gpio_set_irq_enabled(PIEZO, GPIO_IRQ_EDGE_FALL, true);
 
     if (readStruct(&machine)) {
-        //DBG_PRINT("Recovered data:\nCurrentState: %d\nCompartmentsMoved: %d\nCompartmentFinished: %d\nCalibrationCount: %d\n", machine.currentState, machine.compartmentsMoved, machine.compartmentFinished, machine.calibrationCount);
         if (machine.currentState == CALIB_WAITING) {
             eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
             eepromLorawanComm(fixed_msg[6], strlen(fixed_msg[6]));
@@ -124,29 +133,27 @@ int main(void) {
             calibrated = true;
             allLedsOff();
             eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
-            
+
             switch (machine.compartmentFinished) {
                 case IN_THE_MIDDLE:
 
-#ifdef LORAWAN_CONN
                     if (0 != machine.compartmentsMoved) {
-                        loraMsg(fixed_msg[3], strlen(fixed_msg[3]), retval_str);
+                        eepromLorawanComm(fixed_msg[3], strlen(fixed_msg[3]));
                     }
-#endif
+
                     realignMotor();
-                    DBG_PRINT("Restored last known state.\n");
                     sleep_ms(COMPARTMENT_TIME);
                     machine.compartmentFinished = FINISHED;
                     writeStruct(&machine);
                     dispensePills();
-                    resetValues();
                     printLog();
+                    resetValues();
                     machine.currentState = CALIB_WAITING;
                     break;
                 case FINISHED:
                     if (0 == machine.compartmentsMoved) {
                         eepromLorawanComm(fixed_msg[5], strlen(fixed_msg[5]));
-                        machine.compartmentsMoved++;
+                        machine.compartmentsMoved = 1;
                         allLedsOn();
                         break;
                     } else {
@@ -154,8 +161,8 @@ int main(void) {
                         eepromLorawanComm(fixed_msg[2], strlen(fixed_msg[2]));
                         sleep_ms(COMPARTMENT_TIME);
                         dispensePills();
-                        resetValues();
                         printLog();
+                        resetValues();
                         machine.currentState = CALIB_WAITING;
                         break;
                     }
@@ -176,11 +183,7 @@ int main(void) {
                     machine.currentState = DISPENSE_WAITING;
                     machine.calibrationCount = calibration_count;
                     machine.compartmentFinished = 1;
-                    writeStruct(&machine);
-                    machine.compartmentsMoved = 1;
-#ifdef LORAWAN_CONN
-                    loraMsg(fixed_msg[1], strlen(fixed_msg[1]), retval_str);
-#endif
+                    eepromLorawanComm(fixed_msg[1], strlen(fixed_msg[1]));
                     break;
                 case DISPENSE_WAITING:
                     break;
@@ -193,9 +196,10 @@ int main(void) {
                 case CALIB_WAITING:
                     break;
                 case DISPENSE_WAITING:
+                    machine.compartmentsMoved = 1;
                     dispensePills();
-                    resetValues();
                     printLog();
+                    resetValues();
                     break;
             }
         }
@@ -254,6 +258,30 @@ bool repeatingTimerCallback(struct repeating_timer *t) {
 }
 
 /**********************************************************************************************************************
+ * \brief: Function called by timer to blink 5 times if pill not detected from compartment.
+ *
+ * \param: struct repeating_timer *t, not used.
+ *
+ * \return: boolean, returns true if blink_counter is greater than zero, else returns false.
+ *
+ * \remarks:
+ **********************************************************************************************************************/
+bool blinkTimerCallback(struct repeating_timer *t) {
+    if (blink_counter % 2) {
+        allLedsOff();
+    } else {
+        allLedsOn();
+    }
+    blink_counter--;
+
+    if (blink_counter) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+/**********************************************************************************************************************
  * \brief: Dispenses 7 pills resided in 7 different compartments using stepper motor. Controls led lights and blinking
  *         according to events. During the process the function also updates the states and counters, and creates log
  *         messages respectively that are transmitted both to EEPROM and via LoRaWAN to network.
@@ -269,10 +297,12 @@ void dispensePills() {
     bool pill_dispensed = false;
 
     allLedsOff();
-    pill_detected = false;
 
     /* start dispensing pills */
     for (; machine.compartmentsMoved < COMPARTMENTS; machine.compartmentsMoved++) {
+
+        pill_detected = false;
+        pill_dispensed = false;
 
         for (int i = 0; i < (calibration_count / COMPARTMENTS + COMPARTMENTS - 1); i++) {
             runMotorClockwise(1);
@@ -296,20 +326,13 @@ void dispensePills() {
             sprintf(dispensed_msg, "Day %d: Pill dispensed. Number of pills left: %d.", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
             eepromLorawanComm(dispensed_msg, strlen(dispensed_msg));
         } else {
-            for (int j = 0; j < BLINK_TIMES; j++) {
-                blink();
-            }
+            noDetectBlink();
             sprintf(dispensed_msg, "Day %d: Pill not dispensed. Number of pills left: %d.", (const char *) machine.compartmentsMoved, COMPARTMENTS - machine.compartmentsMoved - 1);
             eepromLorawanComm(dispensed_msg, strlen(dispensed_msg));
         }
 
         if ((COMPARTMENTS - 1) > machine.compartmentsMoved) {
-            if (true == pill_dispensed) {
-                pill_dispensed = false;
-                sleep_ms(COMPARTMENT_TIME - BLINK_SLEEP_TIME * 2 * BLINK_TIMES);
-            } else {
-                sleep_ms(COMPARTMENT_TIME);
-            }
+            sleep_ms(COMPARTMENT_TIME - I2C_MEM_WRITE_TIME - LORAWAN_COMM_TIME);
         } else {
             eepromLorawanComm(fixed_msg[4], strlen(fixed_msg[4]));
         }
@@ -330,27 +353,10 @@ void resetValues() {
     machine.compartmentFinished = IN_THE_MIDDLE;
     machine.calibrationCount = 0;
     machine.compartmentsMoved = 0;
+    machine.logCounter = 0;
     writeStruct(&machine);
 }
 
-/**********************************************************************************************************************
- * \brief: Transmits "Boot." to EEPROM as a log message and also via LoRaWAN to the network.
- *
- * \param:
- *
- * \return:
- *
- * \remarks:
- **********************************************************************************************************************/
-/*void printBoot() {
-    DBG_PRINT("%s\n", fixed_msg[0]);
-    writeLogEntry(fixed_msg[0]);
-    writeStruct(&machine); // Update log counter
-#ifdef LORAWAN_CONN
-    loraMsg(fixed_msg[0], strlen(fixed_msg[0]), retval_str);
-#endif
-}
-*/
 /**********************************************************************************************************************
  * \brief: Transmits passed message to EEPROM as a log message and also via LoRaWAN to the network. Updates the struct
  *         to EEPROM.
@@ -362,10 +368,25 @@ void resetValues() {
  * \remarks:
  **********************************************************************************************************************/
 void eepromLorawanComm(const char* message, size_t msg_size) {
-    //DBG_PRINT("%s\n", message);
-    writeStruct(&machine);
+    DBG_PRINT("%s\n", message);
     writeLogEntry(message);
+    writeStruct(&machine);
 #ifdef LORAWAN_CONN
     loraMsg(message, msg_size, retval_str);
 #endif
+}
+
+/**********************************************************************************************************************
+ * \brief: Activates the timer to no pill detection blinking.
+ *
+ * \param:
+ *
+ * \return:
+ *
+ * \remarks:
+ **********************************************************************************************************************/
+void noDetectBlink() {
+    blink_counter = BLINK_TIMES * 2 - 1;
+    add_repeating_timer_ms(BLINK_SLEEP_TIME, blinkTimerCallback, NULL, &blink_timer);
+    allLedsOn();
 }
