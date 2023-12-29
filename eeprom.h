@@ -11,6 +11,7 @@
 #define BAUDRATE 100000
 #define I2C_MEM_SIZE 32768
 #define I2C_MEM_PAGE_SIZE 64
+#define I2C_MEM_WRITE_TIME 10
 
 #define MEM_ADDR_START 0
 #define MAX_LOG_SIZE 64
@@ -47,7 +48,7 @@ void i2cWriteByte_NoDelay(uint16_t address, uint8_t data);
 void i2cWriteByte(uint16_t address, uint8_t data);
 uint8_t i2cReadByte(uint16_t address);
 void i2cReadBytes(uint16_t address, uint8_t *data, uint8_t length);
-uint16_t crc16(const uint8_t *data_p, size_t length);
+uint16_t crc16(const uint8_t *data, size_t length);
 void writeStruct(const machineState *state);
 bool readStruct(machineState *state);
 void writeLogEntry(const char *message);
