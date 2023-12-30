@@ -11,6 +11,7 @@
 #include "lorawan.h"
 #include "eeprom.h"
 #include "steppermotor.h" // includes stepper motor, optofork and piezo related codes
+#include "watchdog.h"
 
 #ifdef DEBUG_PRINT
 #define DBG_PRINT(f_, ...)  printf((f_), ##__VA_ARGS__)
@@ -18,9 +19,9 @@
 #define DBG_PRINT(f_, ...)
 #endif
 
-#define DEBUG
-#ifndef DEBUG
-#define COMPARTMENT_TIME  ( SLEEP_BETWEEN / 8 )
+//#define DEBUG
+#ifdef DEBUG
+#define COMPARTMENT_TIME  ( SLEEP_BETWEEN / 6 )
 #else
 #define COMPARTMENT_TIME  ( SLEEP_BETWEEN )
 #endif
@@ -60,13 +61,14 @@ extern bool calibrated;
 extern bool pill_detected;
 extern bool fallingEdge;
 
-static const char *fixed_msg[7] = {"Boot.",
+static const char *fixed_msg[8] = {"Clean boot.",
                                    "Calibrated. Waiting for button to dispense pills.",
                                    "Powered off during dispense. Motor was not turning.",
                                    "Powered off during dispense. Motor was turning.",
                                    "All pills dispensed. Waiting for button to calibrate.",
                                    "Booted after calibration. Waiting for button to dispense.",
-                                   "Waiting for button to calibrate."};
+                                   "Waiting for button to calibrate.",
+                                   "Reboot by Watchdog."};
 
 /////////////////////////////////////////////////////
 //                     STRUCT                      //
@@ -124,7 +126,11 @@ int main(void) {
 
     if (readStruct(&machine)) {
         if (machine.currentState == CALIB_WAITING) {
-            eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
+            if (watchdog_caused_reboot()) {
+                eepromLorawanComm(fixed_msg[7], strlen(fixed_msg[7]));
+            } else {
+                eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
+            }
             eepromLorawanComm(fixed_msg[6], strlen(fixed_msg[6]));
         }
         if (machine.currentState == DISPENSE_WAITING) {
@@ -132,7 +138,12 @@ int main(void) {
             printLog();
             calibrated = true;
             allLedsOff();
-            eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
+
+            if (watchdog_caused_reboot()) {
+                eepromLorawanComm(fixed_msg[7], strlen(fixed_msg[7]));
+            } else {
+                eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
+            }
 
             switch (machine.compartmentFinished) {
                 case IN_THE_MIDDLE:
@@ -169,9 +180,15 @@ int main(void) {
             }
         }
     } else {
-        eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
+        if (watchdog_caused_reboot()) {
+            eepromLorawanComm(fixed_msg[7], strlen(fixed_msg[7]));
+        } else {
+            eepromLorawanComm(fixed_msg[0], strlen(fixed_msg[0]));
+        }
         eepromLorawanComm(fixed_msg[6], strlen(fixed_msg[6]));
     }
+
+    watchdogInit(20);
 
     while(true) {
         if (true == sw0_buttonEvent) {
@@ -254,6 +271,7 @@ bool repeatingTimerCallback(struct repeating_timer *t) {
     } else {
         sw2_filter_counter = 0;
     }
+    watchdogFeed();
     return true;
 }
 
@@ -335,6 +353,7 @@ void dispensePills() {
             sleep_ms(COMPARTMENT_TIME - I2C_MEM_WRITE_TIME - LORAWAN_COMM_TIME);
         } else {
             eepromLorawanComm(fixed_msg[4], strlen(fixed_msg[4]));
+            sleep_ms(MSG_WAITING_TIME);
         }
     }
 }
