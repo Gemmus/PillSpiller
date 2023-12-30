@@ -24,7 +24,6 @@ typedef struct lorawan_item_ {
     uint sleep_time;
 } lorawan_item;
 
-
 bool loraInit();
 bool loraCommunication(const char* command, const uint sleep_time, char* str);
 bool loraMsg(const char* message, size_t msg_size, char* return_message);
