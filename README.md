@@ -103,9 +103,14 @@ The project utilizes a 28BYJ-48 stepper motor, characterized as a 5-wire unipola
 The system incorporates two sensors: an optical sensor to precisely detect the location of the dispenser wheel and a piezoelectric sensor to verify the dispensing of the pill(s) from the respective compartment. Each is discussed in their own subchapter.
 
 ##### Optical Sensor
+Optical fork sensors, also known as optical sensors, typically consist of a "fork" structure resembling two parallel arms joined together. One arm emits light beams, while the other arm detects whether the beams are interrupted or not. These sensors find applications in various industries for detecting the presence or absence of objects.
+
+In the project, the optical fork sensor with a plastic housing is embedded into the base plastic of the pill dispenser. The programmed functionality, utilizing the opto fork, allows for the detection of the calibration opening on the dispense wheel. This detection facilitates the precise calibration of the wheel by recognizing signals indicating the absence of an interrupting object.
 
 ##### Piezoelectric Sensor 
+A piezoelectric sensor leverages the piezoelectric effect to convert mechanical stimuli, such as changes in pressure, acceleration, temperature, strain, or force, into an electrical charge. [8] This unique property makes piezoelectric sensors versatile instruments capable of capturing and translating various physical phenomena into measurable electrical signals. 
 
+In the context of the pill dispenser, the piezoelectric sensor is strategically employed at the bottom of the pill dispensing opening. It detects the impact caused by the falling pill, allowing the system to validate the successful dispensing of medication. This utilization highlights the sensor's crucial role in providing real-time feedback on the dispenser's operational status, ensuring precision and reliability in the medication dispensing process.
 
 ## Operation Principle
 ![image](https://github.com/Gemmus/PillSpiller/assets/112064697/c04dadc6-7121-439b-ab9f-56200268ddd5)
@@ -120,4 +125,4 @@ The system incorporates two sensors: an optical sensor to precisely detect the l
 5 <a href="https://en.wikipedia.org/wiki/LoRa">Wikipedia. LoRa.</a> <br>
 6 <a href="https://media.digikey.com/pdf/Data%20Sheets/Seeed%20Technology/Grove_LoRa-E5_Web.pdf">Seeed studio. Grove - LoRa-E5.</a> <br>
 7 <a href="https://elecrow.com/wiki/index.php?title=ULN2003_Stepper_Motor_Driver">Electrow. ULN2003 Stepper Motor Driver.</a> <br>
-
+8 <a href="https://en.wikipedia.org/wiki/Piezoelectric_sensor">Wikipedia. Piezoelectric sensor.</a> <br>
