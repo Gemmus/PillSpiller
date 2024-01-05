@@ -114,7 +114,7 @@ In the context of the pill dispenser, the piezoelectric sensor is strategically 
 
 ## Operation Principle
 ![image](https://github.com/Gemmus/PillSpiller/assets/112064697/c04dadc6-7121-439b-ab9f-56200268ddd5)
-<br><small>_Figure 6: Logic of implemented program._</small>
+<br><small>_Figure 7: Logic of implemented program._</small>
 <br> 
 
 ## References
