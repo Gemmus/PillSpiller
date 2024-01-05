@@ -91,7 +91,13 @@ The base of the pill dispenser comprises two plastic components, crafted with a 
 <br><small>_Figure 5: Showcase of pill dispenser: the wheel on the left, base on the right, and the two sensors - piezoelectric and optical._</small>
 <br> 
 
-The plastic part of the base features an opening designed for pill dispensing. At the bottom of this aperture, resides the piezo sensor that detects the descent of the pill(s). The wheel connects to the base through the stepper motor shaft and incorporates a calibration opening that facilitates the functionality of the optical sensor, known as the opto fork. As mentioned in Chapter 1, the wheel is divided into 8 equal compartments: one for calibration and seven for storing drugs corresponding to each day of the week.
+The plastic part of the base features an opening designed for pill dispensing. At the bottom of this aperture, resides the piezo sensor that detects the descent of the pill(s). The wheel connects to the base through the stepper motor shaft and incorporates a calibration opening that facilitates the functionality of the optical sensor, known as the opto fork. The wheel is divided into 8 equal compartments: one for calibration and seven for storing drugs corresponding to each day of the week.
+
+![image](https://github.com/Gemmus/PillSpiller/assets/112064697/1d3a8190-2c47-4752-a504-9141d4f52531)
+<br><small>_Figure 6: Elecrow’s Stepper motor driver. [7]_</small>
+<br> 
+
+The project utilizes a 28BYJ-48 stepper motor, characterized as a 5-wire unipolar motor with 4 coils. Controlled through a stepper motor driver, it facilitates the precise rotation of the dispenser wheel, employing a half-stepping mechanism for accuracy. The specific stepper motor driver utilized is Elecrow’s ULN2003 Stepper Motor Driver, displayed in Figure 5, connected to the processing environment. This driver utilizes ULN2003A to amplify the signal, ensuring efficient and controlled operation. [7] 
 
 #### Sensors of the System
 The system incorporates two sensors: an optical sensor to precisely detect the location of the dispenser wheel and a piezoelectric sensor to verify the dispensing of the pill(s) from the respective compartment. Each is discussed in their own subchapter.
@@ -107,15 +113,11 @@ The system incorporates two sensors: an optical sensor to precisely detect the l
 <br> 
 
 ## References
-1 Raspberry Pi. Raspberry Pi Pico WH. Accessed: 05.01.2024
-https://www.raspberrypi.com/documentation/microcontrollers/raspberry-pi-pico.html <br>
-2 Raspberry Debug Probe. Accessed: 05.01.2024
-https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html <br>
-3 Partco. Crowtail I2C EEPROM 2.0 (24C256). Accessed: 05.01.2024 
-https://www.partco.fi/en/diy-kits/crowtail/23675-ect-ct010021e.html <br>
-4 Elecrow. Crowtail - I2C EEPROM. Accessed: 05.01.2024 
-https://www.elecrow.com/wiki/index.php?title=Crowtail-_I2C_EEPROM <br>
-5 Wikipedia. LoRa. Accessed: 05.01.2024 
-https://en.wikipedia.org/wiki/LoRa <br>
-6 Seeed studio. Grove - LoRa-E5. Accessed: 05.01.2024 
-https://media.digikey.com/pdf/Data%20Sheets/Seeed%20Technology/Grove_LoRa-E5_Web.pdf <br>
+1 <a href="https://www.raspberrypi.com/documentation/microcontrollers/raspberry-pi-pico.html">Raspberry Pi Pico WH</a> <br>
+2 <a href="https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html">Raspberry Debug Probe</a> <br>
+3 <a href="https://www.partco.fi/en/diy-kits/crowtail/23675-ect-ct010021e.html">Partco. Crowtail I2C EEPROM 2.0 (24C256).</a> <br>
+4 <a href="https://www.elecrow.com/wiki/index.php?title=Crowtail-_I2C_EEPROM">Elecrow. Crowtail - I2C EEPROM.</a> <br>
+5 <a href="https://en.wikipedia.org/wiki/LoRa">Wikipedia. LoRa.</a> <br>
+6 <a href="https://media.digikey.com/pdf/Data%20Sheets/Seeed%20Technology/Grove_LoRa-E5_Web.pdf">Seeed studio. Grove - LoRa-E5.</a> <br>
+7 <a href="https://elecrow.com/wiki/index.php?title=ULN2003_Stepper_Motor_Driver">Electrow. ULN2003 Stepper Motor Driver.</a> <br>
+
